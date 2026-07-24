@@ -51,6 +51,11 @@ const productoSchema = new mongoose.Schema({
   modificadores: {
     type: [String], // botones rápidos para el mesero, ej. "Sin cebolla", "Extra picante"
     default: [] // vacío = el mesero ve los modificadores automáticos según el nombre/categoría del platillo
+  },
+  estacion: {
+    type: String,
+    enum: ['cocina', 'barra', ''], // a qué impresora se manda ESTE producto en particular
+    default: '' // vacío = usa la estación de su categoría (comportamiento normal)
   }
 }, { timestamps: true });
 

@@ -215,7 +215,7 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
         estado: 'pendiente'
       });
 
-      const estacion = (producto.categoria && producto.categoria.estacion === 'barra') ? 'barra' : 'cocina';
+      const estacion = producto.estacion || (producto.categoria && producto.categoria.estacion) || 'cocina';
       porEstacion[estacion].push({ nombre: producto.nombre, varianteNombre, cantidad, notas });
     }
 

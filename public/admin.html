@@ -138,6 +138,15 @@
               <p style="font-size:0.72rem; opacity:0.6; margin-top:-6px; margin-bottom:12px;">La receta/insumos de cada tamaño se asigna después desde Inventario &gt; Recetas.</p>
             </div>
             <div class="campo-inline">
+              <label>Se imprime en</label>
+              <select id="prod-estacion">
+                <option value="">Usar la de su categoría (normal)</option>
+                <option value="cocina">🍽 Forzar a Cocina</option>
+                <option value="barra">🍹 Forzar a Barra</option>
+              </select>
+              <p style="font-size:0.72rem; opacity:0.6; margin-top:4px;">Solo si este producto es una excepción a su categoría (ej. una michelada dentro de "Extras" que debe salir en Barra).</p>
+            </div>
+            <div class="campo-inline">
               <label>Modificadores rápidos (opcional)</label>
               <input type="text" id="prod-modificadores" placeholder="Ej. Sin cebolla, Extra picante, Para llevar">
               <p style="font-size:0.72rem; opacity:0.6; margin-top:4px;">Sepáralos con comas. Estos son los botones que verá el mesero para este platillo (ej. "sin cebolla", "sin cilantro", "extra picante"). Si lo dejas vacío, el sistema sugiere unos automáticos según el nombre/categoría del platillo.</p>
@@ -611,6 +620,14 @@
       <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:6px;">Precios por tamaño</label>
       <div id="edit-tamanos-lineas"></div>
       <button type="button" class="btn-agregar-linea" onclick="agregarLineaTamanoEdit()">+ Agregar tamaño</button>
+    </div>
+    <div class="campo-inline">
+      <label>Se imprime en</label>
+      <select id="edit-prod-estacion">
+        <option value="">Usar la de su categoría (normal)</option>
+        <option value="cocina">🍽 Forzar a Cocina</option>
+        <option value="barra">🍹 Forzar a Barra</option>
+      </select>
     </div>
     <div class="campo-inline">
       <label>Modificadores rápidos (opcional)</label>
@@ -1224,6 +1241,7 @@
     document.getElementById('edit-prod-nombre').value = p.nombre;
     document.getElementById('edit-prod-categoria').value = p.categoria ? p.categoria._id : '';
     document.getElementById('edit-prod-modificadores').value = (p.modificadores || []).join(', ');
+    document.getElementById('edit-prod-estacion').value = p.estacion || '';
 
     const tieneVariantes = p.variantes && p.variantes.length > 0;
     document.getElementById('edit-campo-precio-simple').style.display = tieneVariantes ? 'none' : 'block';
@@ -1264,7 +1282,8 @@
       nombre: document.getElementById('edit-prod-nombre').value.trim(),
       categoria: document.getElementById('edit-prod-categoria').value,
       modificadores: document.getElementById('edit-prod-modificadores').value
-        .split(',').map(m => m.trim()).filter(Boolean)
+        .split(',').map(m => m.trim()).filter(Boolean),
+      estacion: document.getElementById('edit-prod-estacion').value
     };
 
     if (tieneVariantes) {
@@ -1311,6 +1330,7 @@
                 </div>
                 <div class="secundario">
                   ${p.categoria ? p.categoria.nombre : 'Sin categoría'} · ${formatoPrecioProducto(p)}
+                  ${p.estacion ? ` · ${p.estacion === 'barra' ? '🍹 Forzado a Barra' : '🍽 Forzado a Cocina'}` : ''}
                 </div>
               </div>
             </div>
@@ -1367,6 +1387,7 @@
       }
       body.modificadores = document.getElementById('prod-modificadores').value
         .split(',').map(m => m.trim()).filter(Boolean);
+      body.estacion = document.getElementById('prod-estacion').value;
 
       const nuevo = await Api.post('/admin/productos', body);
 
