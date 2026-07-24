@@ -22,7 +22,7 @@
       <div class="eyebrow" id="eyebrow-pedido">Mesa</div>
       <h2 class="display" id="titulo-mesa">Cargando…</h2>
     </div>
-    <button class="btn-volver" style="padding:9px 18px; font-weight:600;" onclick="window.location.href='/mesero.html'">← Volver al salón</button>
+    <button class="btn-volver" style="padding:9px 18px; font-weight:600;" onclick="volverAlSalon()">← Volver al salón</button>
   </div>
 
   <div class="vista-pedido">
@@ -48,6 +48,7 @@
         <strong>Nota del pedido</strong>
         <textarea id="nota-general-texto" placeholder="Ej. cliente alérgico a mariscos, es cumpleaños..." onblur="guardarNotaGeneral()"></textarea>
       </div>
+      <div id="carrito-pendiente"></div>
       <div id="ticket-items">
         <div class="ticket-vacio">Aún no hay productos agregados</div>
       </div>
@@ -62,6 +63,11 @@
     </div>
   </div>
 </div>
+
+<!-- Botón flotante para enviar la orden con lo que se va agregando -->
+<button id="btn-enviar-orden" onclick="enviarOrden()" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:30; background:var(--camaron); color:#fff; border:none; border-radius:30px; padding:16px 28px; font-weight:700; font-size:1rem; box-shadow:0 6px 18px rgba(0,0,0,0.25); cursor:pointer;">
+  📤 Enviar orden (<span id="conteo-carrito">0</span>)
+</button>
 
 <!-- Modal para notas del producto -->
 <div class="modal-fondo" id="modal-notas">
@@ -79,7 +85,7 @@
     <textarea id="modal-nota-texto" placeholder="¿Algo más? Escríbelo aquí (opcional)"></textarea>
     <div class="modal-botones">
       <button class="btn-volver" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn-principal" onclick="confirmarAgregar()">Agregar a la comanda</button>
+      <button class="btn-principal" onclick="confirmarAgregar()">Agregar</button>
     </div>
   </div>
 </div>
@@ -100,6 +106,7 @@
   let categoriaActiva = 'todas';
   let pedidoActual = null;
   let productoParaAgregar = null;
+  let carrito = []; // productos que el mesero ya juntó pero AÚN no se han mandado a cocina/barra
 
   if (usuario && (mesaId || llevarId)) {
     pintarBarraSuperior(usuario);
@@ -111,6 +118,13 @@
     init();
     conectarTiempoReal();
   } else if (!mesaId && !llevarId) {
+    window.location.href = '/mesero.html';
+  }
+
+  function volverAlSalon() {
+    if (carrito.length > 0 && !confirm('Todavía tienes productos sin enviar a cocina/barra. ¿Salir de todos modos y perderlos?')) {
+      return;
+    }
     window.location.href = '/mesero.html';
   }
 
@@ -316,20 +330,86 @@
     productoParaAgregar = null;
   }
 
-  async function confirmarAgregar() {
-    if (!productoParaAgregar || !pedidoActual) return;
+  function confirmarAgregar() {
+    if (!productoParaAgregar) return;
     const notaLibre = document.getElementById('modal-nota-texto').value.trim();
     const notas = [modsElegidos.join(', '), notaLibre].filter(Boolean).join(' — ');
+    const producto = productos.find(p => p._id === productoParaAgregar);
+    if (!producto) return;
 
+    let precioUnitario = producto.precio;
+    if (producto.variantes && producto.variantes.length > 0) {
+      const variante = producto.variantes.find(v => v.nombre === varianteElegida);
+      precioUnitario = variante ? variante.precio : producto.variantes[0].precio;
+    }
+
+    carrito.push({
+      productoId: productoParaAgregar,
+      nombre: producto.nombre,
+      varianteNombre: varianteElegida || '',
+      cantidad: 1,
+      notas,
+      precioUnitario
+    });
+
+    mostrarToast(`${producto.nombre} agregado — te falta enviar la orden`);
+    cerrarModal();
+    pintarCarrito();
+  }
+
+  function pintarCarrito() {
+    const cont = document.getElementById('carrito-pendiente');
+    const btnEnviar = document.getElementById('btn-enviar-orden');
+
+    if (carrito.length === 0) {
+      cont.innerHTML = '';
+      btnEnviar.style.display = 'none';
+      return;
+    }
+
+    document.getElementById('conteo-carrito').textContent = carrito.length;
+    btnEnviar.style.display = 'block';
+
+    cont.innerHTML = `
+      <div style="background:#fff8ee; border:1.5px dashed var(--camaron); border-radius:12px; padding:10px 12px; margin-bottom:12px;">
+        <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; color:var(--camaron-oscuro); margin-bottom:6px;">
+          🕓 Por enviar (todavía no está en cocina/barra)
+        </div>
+        ${carrito.map((item, i) => `
+          <div class="ticket-item" style="padding:6px 0;">
+            <div class="info">
+              <span class="cantidad">${item.cantidad}×</span>${item.nombre}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}
+              ${item.notas ? `<div style="font-size:0.75rem; opacity:0.65;">${item.notas}</div>` : ''}
+            </div>
+            <div style="text-align:right;">
+              <div class="precio-linea">$${(item.precioUnitario * item.cantidad).toFixed(2)}</div>
+              <button class="btn-cancelar" onclick="quitarDelCarrito(${i})">Quitar</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function quitarDelCarrito(indice) {
+    carrito.splice(indice, 1);
+    pintarCarrito();
+  }
+
+  async function enviarOrden() {
+    if (carrito.length === 0 || !pedidoActual) return;
     try {
-      await Api.post(`/pedidos/${pedidoActual._id}/items`, {
-        productoId: productoParaAgregar,
-        varianteNombre: varianteElegida,
-        cantidad: 1,
-        notas
+      await Api.post(`/pedidos/${pedidoActual._id}/items/lote`, {
+        items: carrito.map(item => ({
+          productoId: item.productoId,
+          varianteNombre: item.varianteNombre,
+          cantidad: item.cantidad,
+          notas: item.notas
+        }))
       });
-      mostrarToast('Producto agregado a la comanda');
-      cerrarModal();
+      mostrarToast('Orden enviada — imprimiendo en cocina/barra 🖨');
+      carrito = [];
+      pintarCarrito();
       await Promise.all([cargarMenu(), cargarPedido()]);
     } catch (err) {
       mostrarToast(err.message, true);

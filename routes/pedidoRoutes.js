@@ -125,6 +125,8 @@ router.get('/:pedidoId', verificarToken, async (req, res) => {
 });
 
 // Mesero agrega un producto a un pedido/mesa y se descuenta el stock automáticamente
+// (uso puntual / un solo producto — no imprime solo. Para tomar la orden normal
+// desde la pantalla de mesero se usa /items/lote, que manda todo junto y sí imprime).
 router.post('/:pedidoId/items', verificarToken, async (req, res) => {
   try {
     const { productoId, cantidad, notas, varianteNombre } = req.body;
@@ -162,13 +164,68 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
     const io = req.app.get('io');
     if (io) io.emit('nuevoItemPedido', { pedidoId: pedido._id, mesa: pedido.mesa });
 
-    // Impresión automática: en cuanto se agrega el platillo, se manda su comanda
-    // a la impresora de "barra" (bebidas/cocteles) o "cocina" (todo lo demás),
-    // según la categoría del producto. Si esto falla no debe tumbar el pedido.
-    try {
-      await producto.populate('categoria');
-      const estacion = (producto.categoria && producto.categoria.estacion === 'barra') ? 'barra' : 'cocina';
+    res.status(201).json(pedido);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
+// El mesero arma varios productos en su pantalla y los manda TODOS JUNTOS al darle
+// "Enviar orden". Aquí se guardan todos de una vez y se imprime UNA sola comanda
+// por estación (cocina / barra) con todo lo nuevo — no una impresión por producto.
+router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
+  try {
+    const { items } = req.body; // [{ productoId, cantidad, notas, varianteNombre }, ...]
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No hay productos para enviar' });
+    }
+
+    const pedido = await Pedido.findById(req.params.pedidoId);
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (pedido.estadoCuenta !== 'abierta') {
+      return res.status(400).json({ error: 'Esta cuenta ya está cerrada' });
+    }
+
+    const porEstacion = { cocina: [], barra: [] };
+
+    for (const linea of items) {
+      const { productoId, notas, varianteNombre } = linea;
+      const cantidad = Number(linea.cantidad) || 1;
+
+      const producto = await Producto.findById(productoId).populate('categoria');
+      if (!producto) continue; // producto ya no existe, lo saltamos sin tumbar todo el envío
+
+      let precioUnitario = producto.precio;
+      if (producto.variantes && producto.variantes.length > 0) {
+        const variante = producto.variantes.find(v => v.nombre === varianteNombre);
+        if (!variante) {
+          return res.status(400).json({ error: `"${producto.nombre}" requiere elegir un tamaño` });
+        }
+        precioUnitario = variante.precio;
+      }
+
+      await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
+
+      pedido.items.push({
+        producto: productoId,
+        varianteNombre: varianteNombre || '',
+        precioUnitario,
+        cantidad,
+        notas,
+        estado: 'pendiente'
+      });
+
+      const estacion = (producto.categoria && producto.categoria.estacion === 'barra') ? 'barra' : 'cocina';
+      porEstacion[estacion].push({ nombre: producto.nombre, varianteNombre, cantidad, notas });
+    }
+
+    await pedido.save();
+
+    const io = req.app.get('io');
+    if (io) io.emit('nuevoItemPedido', { pedidoId: pedido._id, mesa: pedido.mesa });
+
+    // Una comanda por estación con TODO lo que se acaba de mandar (no una por producto)
+    try {
       let encabezado;
       if (pedido.tipo === 'mesa') {
         const mesaDoc = await Mesa.findById(pedido.mesa);
@@ -176,21 +233,29 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
       } else {
         encabezado = `PARA LLEVAR${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`;
       }
-
       const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-      const html = `
-        <h2>EL MARISQUITO</h2>
-        <div class="centrado chico">${estacion === 'barra' ? 'Comanda de barra' : 'Comanda de cocina'} — ${hora}</div>
-        <div class="linea-punteada"></div>
-        <div class="fila-print"><strong>${encabezado}</strong></div>
-        <div class="linea-punteada"></div>
-        <div class="fila-print"><span>${cantidad}× ${producto.nombre}${varianteNombre ? ' (' + varianteNombre + ')' : ''}</span></div>
-        ${notas ? `<div class="chico">— ${notas}</div>` : ''}
-        <div class="linea-punteada"></div>
-      `;
 
-      const trabajo = await ColaImpresion.create({ tipo: 'comanda', estacion, html });
-      if (io) io.emit('nuevaImpresion', { id: trabajo._id });
+      for (const estacion of ['cocina', 'barra']) {
+        const lineas = porEstacion[estacion];
+        if (lineas.length === 0) continue;
+
+        const html = `
+          <h2>EL MARISQUITO</h2>
+          <div class="centrado chico">${estacion === 'barra' ? 'Comanda de barra' : 'Comanda de cocina'} — ${hora}</div>
+          <div class="linea-punteada"></div>
+          <div class="fila-print"><strong>${encabezado}</strong></div>
+          ${pedido.notaGeneral ? `<div class="chico">Nota: ${pedido.notaGeneral}</div>` : ''}
+          <div class="linea-punteada"></div>
+          ${lineas.map(l => `
+            <div class="fila-print"><span>${l.cantidad}× ${l.nombre}${l.varianteNombre ? ' (' + l.varianteNombre + ')' : ''}</span></div>
+            ${l.notas ? `<div class="chico">— ${l.notas}</div>` : ''}
+          `).join('')}
+          <div class="linea-punteada"></div>
+        `;
+
+        const trabajo = await ColaImpresion.create({ tipo: 'comanda', estacion, html });
+        if (io) io.emit('nuevaImpresion', { id: trabajo._id });
+      }
     } catch (errImpresion) {
       console.error('No se pudo generar el ticket de impresión automática:', errImpresion.message);
     }
