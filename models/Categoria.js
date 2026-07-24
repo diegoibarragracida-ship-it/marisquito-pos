@@ -14,6 +14,11 @@ const categoriaSchema = new mongoose.Schema({
   activa: {
     type: Boolean,
     default: true
+  },
+  estacion: {
+    type: String,
+    enum: ['cocina', 'barra'], // a qué impresora se manda la comanda de los productos de esta categoría
+    default: 'cocina'
   }
 }, { timestamps: true });
 

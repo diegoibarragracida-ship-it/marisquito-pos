@@ -3,6 +3,7 @@ const router = express.Router();
 const Pedido = require('../models/Pedido');
 const Mesa = require('../models/Mesa');
 const Producto = require('../models/Producto');
+const ColaImpresion = require('../models/ColaImpresion');
 const { descontarStockPorVenta, revertirStockPorCancelacion } = require('../controllers/inventarioController');
 const { verificarToken } = require('../middleware/auth');
 
@@ -160,6 +161,39 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) io.emit('nuevoItemPedido', { pedidoId: pedido._id, mesa: pedido.mesa });
+
+    // Impresión automática: en cuanto se agrega el platillo, se manda su comanda
+    // a la impresora de "barra" (bebidas/cocteles) o "cocina" (todo lo demás),
+    // según la categoría del producto. Si esto falla no debe tumbar el pedido.
+    try {
+      await producto.populate('categoria');
+      const estacion = (producto.categoria && producto.categoria.estacion === 'barra') ? 'barra' : 'cocina';
+
+      let encabezado;
+      if (pedido.tipo === 'mesa') {
+        const mesaDoc = await Mesa.findById(pedido.mesa);
+        encabezado = `MESA ${mesaDoc ? mesaDoc.numero : ''}`;
+      } else {
+        encabezado = `PARA LLEVAR${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`;
+      }
+
+      const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+      const html = `
+        <h2>EL MARISQUITO</h2>
+        <div class="centrado chico">${estacion === 'barra' ? 'Comanda de barra' : 'Comanda de cocina'} — ${hora}</div>
+        <div class="linea-punteada"></div>
+        <div class="fila-print"><strong>${encabezado}</strong></div>
+        <div class="linea-punteada"></div>
+        <div class="fila-print"><span>${cantidad}× ${producto.nombre}${varianteNombre ? ' (' + varianteNombre + ')' : ''}</span></div>
+        ${notas ? `<div class="chico">— ${notas}</div>` : ''}
+        <div class="linea-punteada"></div>
+      `;
+
+      const trabajo = await ColaImpresion.create({ tipo: 'comanda', estacion, html });
+      if (io) io.emit('nuevaImpresion', { id: trabajo._id });
+    } catch (errImpresion) {
+      console.error('No se pudo generar el ticket de impresión automática:', errImpresion.message);
+    }
 
     res.status(201).json(pedido);
   } catch (err) {

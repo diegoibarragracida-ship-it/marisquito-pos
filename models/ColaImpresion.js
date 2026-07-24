@@ -14,6 +14,11 @@ const colaImpresionSchema = new mongoose.Schema({
     type: String,
     enum: ['pendiente', 'impreso'],
     default: 'pendiente'
+  },
+  estacion: {
+    type: String,
+    enum: ['cocina', 'barra']
+    // sin valor = se imprime en cualquier estación (compatibilidad con impresora única / tickets de caja)
   }
 }, { timestamps: true });
 

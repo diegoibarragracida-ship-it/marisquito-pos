@@ -22,8 +22,11 @@ router.post('/', verificarToken, async (req, res) => {
 });
 
 // Ver trabajos pendientes (los consume la estación de impresión)
+// ?estacion=cocina o ?estacion=barra -> solo esa estación. Sin filtro -> todo (modo impresora única).
 router.get('/pendientes', verificarToken, async (req, res) => {
-  const pendientes = await ColaImpresion.find({ estado: 'pendiente' }).sort('createdAt');
+  const filtro = { estado: 'pendiente' };
+  if (req.query.estacion) filtro.estacion = req.query.estacion;
+  const pendientes = await ColaImpresion.find(filtro).sort('createdAt');
   res.json(pendientes);
 });
 

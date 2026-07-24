@@ -912,7 +912,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .btn-imprimir:hover { background: #060e0d; }
 
 /* =========================================================
-   IMPRESIÓN — formato angosto para impresora térmica (80mm)
+   IMPRESIÓN — formato angosto para impresora térmica (58mm)
    Se activa solo dentro de #zona-imprimible al usar window.print()
    ========================================================= */
 .zona-imprimible { display: none; }
@@ -924,15 +924,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     display: block;
     position: absolute;
     top: 0; left: 0;
-    width: 80mm;
-    padding: 4mm;
+    width: 48mm; /* ancho imprimible real de un rollo de 58mm (deja margen de la impresora) */
+    padding: 2mm;
     font-family: 'Courier New', monospace;
     color: #000;
-    font-size: 12px;
+    font-size: 11px;
   }
   .zona-imprimible h2 {
     text-align: center;
-    font-size: 15px;
+    font-size: 13px;
     margin: 0 0 4px;
   }
   .zona-imprimible .linea-punteada {
@@ -946,9 +946,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     margin: 2px 0;
   }
   .zona-imprimible .centrado { text-align: center; }
-  .zona-imprimible .chico { font-size: 10px; }
+  .zona-imprimible .chico { font-size: 9px; }
   .zona-imprimible .total-print {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: bold;
     margin-top: 6px;
   }
