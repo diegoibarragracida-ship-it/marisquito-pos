@@ -26,8 +26,14 @@ const productoSchema = new mongoose.Schema({
   },
   precio: {
     type: Number,
-    required: true
+    required: function () { return !this.variantes || this.variantes.length === 0; }
+    // si el producto tiene variantes (ej. tamaños), este precio no se usa; se ignora a favor del precio de cada variante
   },
+  variantes: [{
+    nombre: { type: String, required: true, trim: true }, // ej. "Chico", "Mediano", "Bola"
+    precio: { type: Number, required: true },
+    receta: [recetaItemSchema]
+  }],
   disponible: {
     type: Boolean,
     default: true

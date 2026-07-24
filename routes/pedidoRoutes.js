@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Pedido = require('../models/Pedido');
 const Mesa = require('../models/Mesa');
+const Producto = require('../models/Producto');
 const { descontarStockPorVenta, revertirStockPorCancelacion } = require('../controllers/inventarioController');
 const { verificarToken } = require('../middleware/auth');
 
@@ -125,7 +126,7 @@ router.get('/:pedidoId', verificarToken, async (req, res) => {
 // Mesero agrega un producto a un pedido/mesa y se descuenta el stock automáticamente
 router.post('/:pedidoId/items', verificarToken, async (req, res) => {
   try {
-    const { productoId, cantidad, notas } = req.body;
+    const { productoId, cantidad, notas, varianteNombre } = req.body;
     const pedido = await Pedido.findById(req.params.pedidoId);
 
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -133,9 +134,28 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
       return res.status(400).json({ error: 'Esta cuenta ya está cerrada' });
     }
 
-    await descontarStockPorVenta(productoId, cantidad);
+    const producto = await Producto.findById(productoId);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    pedido.items.push({ producto: productoId, cantidad, notas, estado: 'pendiente' });
+    let precioUnitario = producto.precio;
+    if (producto.variantes && producto.variantes.length > 0) {
+      const variante = producto.variantes.find(v => v.nombre === varianteNombre);
+      if (!variante) {
+        return res.status(400).json({ error: 'Este producto requiere elegir un tamaño (Chico/Mediano/Bola)' });
+      }
+      precioUnitario = variante.precio;
+    }
+
+    await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
+
+    pedido.items.push({
+      producto: productoId,
+      varianteNombre: varianteNombre || '',
+      precioUnitario,
+      cantidad,
+      notas,
+      estado: 'pendiente'
+    });
     await pedido.save();
 
     const io = req.app.get('io');
@@ -186,7 +206,7 @@ router.patch('/:pedidoId/items/:itemId/cancelar', verificarToken, async (req, re
     const item = pedido.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item no encontrado' });
 
-    await revertirStockPorCancelacion(item.producto, item.cantidad);
+    await revertirStockPorCancelacion(item.producto, item.cantidad, item.varianteNombre || '');
     item.estado = 'cancelado';
     await pedido.save();
 

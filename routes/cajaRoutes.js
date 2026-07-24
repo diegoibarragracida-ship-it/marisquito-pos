@@ -25,7 +25,7 @@ router.post('/dividir/:pedidoId', verificarToken, permitirRoles('cajero', 'admin
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const itemsActivos = pedido.items.filter(i => i.estado !== 'cancelado');
-    const subtotal = itemsActivos.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
+    const subtotal = itemsActivos.reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
 
     if (modo === 'partes_iguales') {
       if (!numPersonas || numPersonas < 1) {
@@ -47,7 +47,7 @@ router.post('/dividir/:pedidoId', verificarToken, permitirRoles('cajero', 'admin
 
       const resultado = asignaciones.map(a => {
         const itemsDePersona = itemsActivos.filter(i => a.itemIds.includes(String(i._id)));
-        const totalPersona = itemsDePersona.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
+        const totalPersona = itemsDePersona.reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
         return { persona: a.persona, total: totalPersona, items: itemsDePersona };
       });
 
@@ -73,7 +73,7 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
 
     const subtotal = pedido.items
       .filter(i => i.estado !== 'cancelado')
-      .reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
+      .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
 
     let descuentoPromocion = 0;
     let promocionAplicada = null;
@@ -116,7 +116,7 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
 
     const subtotal = pedido.items
       .filter(i => i.estado !== 'cancelado')
-      .reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
+      .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
     const totalPagado = pedido.pagos.reduce((acc, p) => acc + p.monto, 0);
     const restante = Number((subtotal - totalPagado).toFixed(2));
 

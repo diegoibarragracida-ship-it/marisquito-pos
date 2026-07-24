@@ -111,10 +111,18 @@
                 <label>Categoría</label>
                 <select id="prod-categoria" required></select>
               </div>
-              <div class="campo-inline">
+              <div class="campo-inline" id="campo-precio-simple">
                 <label>Precio</label>
-                <input type="number" id="prod-precio" min="0" step="0.01" required>
+                <input type="number" id="prod-precio" min="0" step="0.01">
               </div>
+            </div>
+            <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; margin-bottom:10px;">
+              <input type="checkbox" id="prod-tiene-tamanos" style="width:auto;" onchange="toggleTamanosUI()"> Tiene tamaños (ej. Chico / Mediano / Bola), cada uno con su precio
+            </label>
+            <div id="bloque-tamanos" style="display:none;">
+              <div id="tamanos-lineas"></div>
+              <button type="button" class="btn-agregar-linea" onclick="agregarLineaTamano()">+ Agregar tamaño</button>
+              <p style="font-size:0.72rem; opacity:0.6; margin-top:-6px; margin-bottom:12px;">La receta/insumos de cada tamaño se asigna después desde Inventario &gt; Recetas.</p>
             </div>
             <div class="campo-inline">
               <label>Foto (opcional)</label>
@@ -677,7 +685,7 @@
       }
       cont.innerHTML = pedidos.map(p => {
         const items = p.items.filter(i => i.estado !== 'cancelado');
-        const total = items.reduce((acc, i) => acc + (i.producto ? i.producto.precio * i.cantidad : 0), 0);
+        const total = items.reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
         return `
           <div class="mesa-vivo-card">
             <div class="mesa-vivo-header">
@@ -978,7 +986,7 @@
     cont.innerHTML = disponibles.map(p => `
       <div class="paquete-checklist-linea">
         <input type="checkbox" class="paq-check" value="${p._id}" id="paq-chk-${p._id}">
-        <label class="paq-nombre-prod" for="paq-chk-${p._id}">${p.nombre}<span class="precio-mini">$${p.precio.toFixed(2)}</span></label>
+        <label class="paq-nombre-prod" for="paq-chk-${p._id}">${p.nombre}<span class="precio-mini">${formatoPrecioProducto(p)}</span></label>
         <input type="number" class="paq-cantidad" min="1" step="1" value="1">
       </div>
     `).join('');
@@ -1039,7 +1047,7 @@
               ${!p.disponible ? '<span class="chip-agotado">Agotado</span>' : ''}
             </div>
             <div class="secundario">
-              ${p.categoria ? p.categoria.nombre : 'Sin categoría'} · $${p.precio.toFixed(2)}
+              ${p.categoria ? p.categoria.nombre : 'Sin categoría'} · ${formatoPrecioProducto(p)}
               ${p.productosIncluidos && p.productosIncluidos.length
                 ? ' · Incluye: ' + p.productosIncluidos.map(i => `${i.cantidad}× ${i.producto ? i.producto.nombre : '?'}`).join(', ')
                 : ''}
@@ -1058,6 +1066,41 @@
         </div>
       </div>
     `).join('');
+  }
+
+  /* ---------------- TAMAÑOS / VARIANTES ---------------- */
+  function formatoPrecioProducto(p) {
+    if (p.variantes && p.variantes.length > 0) {
+      const precios = p.variantes.map(v => v.precio);
+      const min = Math.min(...precios);
+      const max = Math.max(...precios);
+      return min === max ? `$${min.toFixed(2)}` : `$${min.toFixed(2)} - $${max.toFixed(2)}`;
+    }
+    return `$${(p.precio || 0).toFixed(2)}`;
+  }
+
+  function toggleTamanosUI() {
+    const activo = document.getElementById('prod-tiene-tamanos').checked;
+    document.getElementById('bloque-tamanos').style.display = activo ? 'block' : 'none';
+    document.getElementById('campo-precio-simple').style.display = activo ? 'none' : 'block';
+    document.getElementById('prod-precio').required = !activo;
+    if (activo && document.getElementById('tamanos-lineas').children.length === 0) {
+      agregarLineaTamano('Chico');
+      agregarLineaTamano('Mediano');
+      agregarLineaTamano('Bola');
+    }
+  }
+
+  function agregarLineaTamano(nombreSugerido) {
+    const cont = document.getElementById('tamanos-lineas');
+    const linea = document.createElement('div');
+    linea.className = 'receta-linea';
+    linea.innerHTML = `
+      <input type="text" placeholder="Nombre (ej. Chico)" class="tamano-nombre" value="${nombreSugerido || ''}">
+      <input type="number" placeholder="Precio" class="tamano-precio" min="0" step="0.01">
+      <button type="button" onclick="this.parentElement.remove()">✕</button>
+    `;
+    cont.appendChild(linea);
   }
 
   /* ---------------- PRODUCTOS (Menú) ---------------- */
@@ -1083,7 +1126,7 @@
                   ${!p.disponible ? '<span class="chip-agotado">Agotado</span>' : ''}
                 </div>
                 <div class="secundario">
-                  ${p.categoria ? p.categoria.nombre : 'Sin categoría'} · $${p.precio.toFixed(2)}
+                  ${p.categoria ? p.categoria.nombre : 'Sin categoría'} · ${formatoPrecioProducto(p)}
                 </div>
               </div>
             </div>
@@ -1110,15 +1153,35 @@
 
   async function crearProducto(e) {
     e.preventDefault();
+    const tieneTamanos = document.getElementById('prod-tiene-tamanos').checked;
+    const variantes = tieneTamanos
+      ? Array.from(document.querySelectorAll('#tamanos-lineas .receta-linea')).map(linea => ({
+          nombre: linea.querySelector('.tamano-nombre').value.trim(),
+          precio: Number(linea.querySelector('.tamano-precio').value) || 0,
+          receta: []
+        })).filter(v => v.nombre)
+      : [];
+
+    if (tieneTamanos && variantes.length === 0) {
+      mostrarToast('Agrega al menos un tamaño con su precio', true);
+      return;
+    }
+
     try {
-      const nuevo = await Api.post('/admin/productos', {
+      const body = {
         nombre: document.getElementById('prod-nombre').value.trim(),
         categoria: document.getElementById('prod-categoria').value,
-        precio: Number(document.getElementById('prod-precio').value),
         esPaquete: false,
         productosIncluidos: [],
         receta: []
-      });
+      };
+      if (tieneTamanos) {
+        body.variantes = variantes;
+      } else {
+        body.precio = Number(document.getElementById('prod-precio').value);
+      }
+
+      const nuevo = await Api.post('/admin/productos', body);
 
       const archivo = document.getElementById('prod-foto').files[0];
       if (archivo) {
@@ -1127,6 +1190,9 @@
 
       mostrarToast('Producto creado. Ahora ve a Inventario > Recetas para asignarle sus insumos.');
       e.target.reset();
+      document.getElementById('bloque-tamanos').style.display = 'none';
+      document.getElementById('campo-precio-simple').style.display = 'block';
+      document.getElementById('tamanos-lineas').innerHTML = '';
       cargarProductos();
     } catch (err) {
       mostrarToast(err.message, true);

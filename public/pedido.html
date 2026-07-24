@@ -66,8 +66,12 @@
 <!-- Modal para notas del producto -->
 <div class="modal-fondo" id="modal-notas">
   <div class="modal-caja">
-    <h3>Agregar nota</h3>
+    <h3>Agregar a la comanda</h3>
     <p style="font-size:0.85rem; opacity:0.7;" id="modal-producto-nombre"></p>
+    <div id="bloque-variantes" style="display:none; margin-bottom:14px;">
+      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Elige el tamaño</label>
+      <div id="variantes-opciones" class="variantes-opciones"></div>
+    </div>
     <textarea id="modal-nota-texto" placeholder="Ej. sin cebolla, extra picante..."></textarea>
     <div class="modal-botones">
       <button class="btn-volver" onclick="cerrarModal()">Cancelar</button>
@@ -168,23 +172,54 @@
       return;
     }
 
-    cont.innerHTML = lista.map(p => `
+    cont.innerHTML = lista.map(p => {
+      const tieneVariantes = p.variantes && p.variantes.length > 0;
+      const precioMostrado = tieneVariantes
+        ? `Desde $${Math.min(...p.variantes.map(v => v.precio)).toFixed(2)}`
+        : `$${p.precio.toFixed(2)}`;
+      return `
       <div class="producto-card ${p.disponible ? '' : 'agotado'}">
         ${p.foto ? `<img class="foto-producto" src="${p.foto}" alt="">` : ''}
         <span class="nombre">${p.esPaquete ? '📦 ' : ''}${p.nombre}</span>
-        <span class="precio">$${p.precio.toFixed(2)}</span>
-        <button ${p.disponible ? '' : 'disabled'} onclick="abrirModalNotas('${p._id}', '${p.nombre.replace(/'/g, "\\'")}')">
+        <span class="precio">${precioMostrado}</span>
+        <button ${p.disponible ? '' : 'disabled'} onclick='abrirModalNotas(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
           ${p.disponible ? 'Agregar' : 'Agotado'}
         </button>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
-  function abrirModalNotas(productoId, nombre) {
-    productoParaAgregar = productoId;
-    document.getElementById('modal-producto-nombre').textContent = nombre;
+  let varianteElegida = '';
+
+  function abrirModalNotas(producto) {
+    productoParaAgregar = producto._id;
+    varianteElegida = '';
+    document.getElementById('modal-producto-nombre').textContent = producto.nombre;
     document.getElementById('modal-nota-texto').value = '';
+
+    const bloque = document.getElementById('bloque-variantes');
+    const opciones = document.getElementById('variantes-opciones');
+    if (producto.variantes && producto.variantes.length > 0) {
+      bloque.style.display = 'block';
+      varianteElegida = producto.variantes[0].nombre;
+      opciones.innerHTML = producto.variantes.map((v, i) => `
+        <button type="button" class="btn-variante ${i === 0 ? 'activa' : ''}" data-nombre="${v.nombre}" onclick="elegirVariante(this, '${v.nombre.replace(/'/g, "\\'")}')">
+          ${v.nombre}<span class="variante-precio">$${v.precio.toFixed(2)}</span>
+        </button>
+      `).join('');
+    } else {
+      bloque.style.display = 'none';
+      opciones.innerHTML = '';
+    }
+
     document.getElementById('modal-notas').classList.add('mostrar');
+  }
+
+  function elegirVariante(btn, nombre) {
+    varianteElegida = nombre;
+    document.querySelectorAll('#variantes-opciones .btn-variante').forEach(b => b.classList.remove('activa'));
+    btn.classList.add('activa');
   }
 
   function cerrarModal() {
@@ -199,6 +234,7 @@
     try {
       await Api.post(`/pedidos/${pedidoActual._id}/items`, {
         productoId: productoParaAgregar,
+        varianteNombre: varianteElegida,
         cantidad: 1,
         notas
       });
@@ -262,16 +298,17 @@
     let total = 0;
     cont.innerHTML = items.map(item => {
       const activo = item.estado !== 'cancelado';
-      if (activo) total += item.producto.precio * item.cantidad;
+      if (activo) total += item.precioUnitario * item.cantidad;
+      const nombreConVariante = item.varianteNombre ? `${item.producto.nombre} (${item.varianteNombre})` : item.producto.nombre;
       return `
         <div class="ticket-item">
           <div class="info">
-            <span class="cantidad">${item.cantidad}×</span>${item.producto.nombre}
+            <span class="cantidad">${item.cantidad}×</span>${nombreConVariante}
             ${item.notas ? `<div style="font-size:0.75rem; opacity:0.65;">${item.notas}</div>` : ''}
             <div><span class="estado-chip ${item.estado}">${item.estado}</span></div>
           </div>
           <div style="text-align:right;">
-            <div class="precio-linea">$${(item.producto.precio * item.cantidad).toFixed(2)}</div>
+            <div class="precio-linea">$${(item.precioUnitario * item.cantidad).toFixed(2)}</div>
             ${activo ? `<button class="btn-cancelar" onclick="cancelarItem('${item._id}')">Cancelar</button>` : ''}
           </div>
         </div>

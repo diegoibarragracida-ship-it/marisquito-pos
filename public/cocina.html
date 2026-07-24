@@ -70,7 +70,7 @@
           ${c.items.map(item => `
             <div class="comanda-item">
               <div class="nombre-item">
-                <span class="cant">${item.cantidad}×</span>${item.producto ? item.producto.nombre : 'Producto'}
+                <span class="cant">${item.cantidad}×</span>${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}
                 ${tiempoEsperaHtml(item.createdAt)}
               </div>
               ${item.notas ? `<div class="nota-item">${item.notas}</div>` : ''}
@@ -103,7 +103,7 @@
       ${comanda.notaGeneral ? `<div class="chico">Nota: ${comanda.notaGeneral}</div>` : ''}
       <div class="linea-punteada"></div>
       ${comanda.items.map(item => `
-        <div class="fila-print"><span>${item.cantidad}× ${item.producto ? item.producto.nombre : 'Producto'}</span></div>
+        <div class="fila-print"><span>${item.cantidad}× ${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}</span></div>
         ${item.notas ? `<div class="chico">— ${item.notas}</div>` : ''}
       `).join('')}
       <div class="linea-punteada"></div>

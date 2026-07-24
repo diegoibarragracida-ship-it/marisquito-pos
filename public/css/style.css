@@ -735,6 +735,36 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   text-align: center;
 }
 
+.variantes-opciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-variante {
+  flex: 1;
+  min-width: 90px;
+  background: #fff;
+  border: 2px solid rgba(0,0,0,0.12) !important;
+  border-radius: 12px;
+  padding: 10px 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.btn-variante .variante-precio {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--oceano);
+}
+.btn-variante.activa {
+  border-color: var(--camaron) !important;
+  background: #fff3ee;
+}
+
 /* ---------- Caja ---------- */
 .turno-banda {
   background: var(--blanco);

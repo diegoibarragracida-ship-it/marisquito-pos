@@ -6,6 +6,14 @@ const itemPedidoSchema = new mongoose.Schema({
     ref: 'Producto',
     required: true
   },
+  varianteNombre: {
+    type: String, // ej. "Chico", "Mediano", "Bola" — vacío si el producto no tiene tamaños
+    default: ''
+  },
+  precioUnitario: {
+    type: Number, // precio congelado al momento de agregarlo (protege el historial de cambios de precio)
+    required: true
+  },
   cantidad: {
     type: Number,
     required: true,

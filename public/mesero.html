@@ -109,7 +109,7 @@
         return;
       }
       cont.innerHTML = pedidos.map(p => {
-        const total = p.items.filter(i => i.estado !== 'cancelado').reduce((acc, i) => acc + (i.producto ? i.producto.precio * i.cantidad : 0), 0);
+        const total = p.items.filter(i => i.estado !== 'cancelado').reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
         return `
           <div class="mesa-card ocupada">
             <div class="numero">🥡</div>

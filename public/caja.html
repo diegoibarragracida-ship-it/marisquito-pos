@@ -207,7 +207,7 @@
       cont.innerHTML = pedidos.map(p => {
         const total = p.items
           .filter(i => i.estado !== 'cancelado')
-          .reduce((acc, i) => acc + (i.producto ? i.producto.precio * i.cantidad : 0), 0);
+          .reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
         const esLlevar = p.tipo === 'para_llevar';
         const encabezado = esLlevar
           ? `🥡 Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`
@@ -249,8 +249,8 @@
     const items = pedido.items.filter(i => i.estado !== 'cancelado');
     cont.innerHTML = (pedido.notaGeneral ? `<div class="nota-general-caja" style="margin-bottom:10px;">📌 ${pedido.notaGeneral}</div>` : '') + items.map(i => `
       <div class="resumen-linea">
-        <span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}</span>
-        <span>$${(i.producto ? i.producto.precio * i.cantidad : 0).toFixed(2)}</span>
+        <span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}</span>
+        <span>$${(i.producto ? i.precioUnitario * i.cantidad : 0).toFixed(2)}</span>
       </div>
     `).join('');
 
@@ -280,7 +280,7 @@
       <div class="centrado chico">${pedidoEnCobro.tipo === 'para_llevar' ? `Para llevar${pedidoEnCobro.clienteLlevar ? ' — ' + pedidoEnCobro.clienteLlevar : ''}` : `Mesa ${pedidoEnCobro.mesa.numero}`}</div>
       <div class="linea-punteada"></div>
       ${items.map(i => `
-        <div class="fila-print"><span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}</span><span>$${(i.producto ? i.producto.precio * i.cantidad : 0).toFixed(2)}</span></div>
+        <div class="fila-print"><span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}</span><span>$${(i.producto ? i.precioUnitario * i.cantidad : 0).toFixed(2)}</span></div>
       `).join('')}
       <div class="linea-punteada"></div>
       <div class="fila-print"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
@@ -302,7 +302,7 @@
   function subtotalPedido(pedido) {
     return pedido.items
       .filter(i => i.estado !== 'cancelado')
-      .reduce((acc, i) => acc + (i.producto ? i.producto.precio * i.cantidad : 0), 0);
+      .reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
   }
 
   function calcularDescuentoPromocion(subtotal) {

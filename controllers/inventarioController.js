@@ -4,14 +4,16 @@ const MovimientoInsumo = require('../models/MovimientoInsumo');
 
 /**
  * Devuelve la receta "efectiva" de un producto: si es un producto normal,
- * es su propia receta. Si es un paquete/combo, es la suma de las recetas
- * de todos los productos que lo componen (multiplicadas por su cantidad
- * dentro del paquete). Funciona también si un paquete incluyera otro
- * paquete, aunque en la práctica no suele pasar.
+ * es su propia receta. Si tiene variantes (tamaños: chico/mediano/bola),
+ * es la receta de la variante indicada. Si es un paquete/combo, es la suma
+ * de las recetas de todos los productos que lo componen (multiplicadas por
+ * su cantidad dentro del paquete). Funciona también si un paquete incluyera
+ * otro paquete, aunque en la práctica no suele pasar.
  */
-async function obtenerRecetaEfectiva(productoId) {
+async function obtenerRecetaEfectiva(productoId, varianteNombre = '') {
   const producto = await Producto.findById(productoId)
     .populate('receta.insumo')
+    .populate('variantes.receta.insumo')
     .populate('productosIncluidos.producto');
 
   if (!producto) throw new Error('Producto no encontrado');
@@ -25,6 +27,11 @@ async function obtenerRecetaEfectiva(productoId) {
       }
     }
     return recetaCombinada;
+  }
+
+  if (producto.variantes && producto.variantes.length > 0) {
+    const variante = producto.variantes.find(v => v.nombre === varianteNombre) || producto.variantes[0];
+    return variante.receta.map(r => ({ insumo: r.insumo, cantidad: r.cantidad }));
   }
 
   return producto.receta.map(r => ({ insumo: r.insumo, cantidad: r.cantidad }));
@@ -45,16 +52,16 @@ function fusionarReceta(receta) {
   return Array.from(mapa.values());
 }
 
-async function recetaEfectivaFusionada(productoId) {
-  return fusionarReceta(await obtenerRecetaEfectiva(productoId));
+async function recetaEfectivaFusionada(productoId, varianteNombre = '') {
+  return fusionarReceta(await obtenerRecetaEfectiva(productoId, varianteNombre));
 }
 
 /**
  * Verifica si hay stock suficiente para vender "cantidad" unidades de un producto
- * (o paquete), revisando cada insumo de su receta efectiva.
+ * (o paquete/variante), revisando cada insumo de su receta efectiva.
  */
-async function hayStockSuficiente(productoId, cantidad = 1) {
-  const receta = await recetaEfectivaFusionada(productoId);
+async function hayStockSuficiente(productoId, cantidad = 1, varianteNombre = '') {
+  const receta = await recetaEfectivaFusionada(productoId, varianteNombre);
 
   for (const item of receta) {
     const insumo = item.insumo;
@@ -74,13 +81,13 @@ async function hayStockSuficiente(productoId, cantidad = 1) {
 }
 
 /**
- * Descuenta del stock de cada insumo lo que consume el producto (o paquete) vendido.
+ * Descuenta del stock de cada insumo lo que consume el producto (o paquete/variante) vendido.
  * Se debe llamar cuando el mesero confirma/envía el pedido a cocina.
  */
-async function descontarStockPorVenta(productoId, cantidad = 1) {
-  const receta = await recetaEfectivaFusionada(productoId);
+async function descontarStockPorVenta(productoId, cantidad = 1, varianteNombre = '') {
+  const receta = await recetaEfectivaFusionada(productoId, varianteNombre);
 
-  const check = await hayStockSuficiente(productoId, cantidad);
+  const check = await hayStockSuficiente(productoId, cantidad, varianteNombre);
   if (!check.ok) {
     throw new Error(
       `Stock insuficiente de "${check.faltante}". Disponible: ${check.disponible}, requerido: ${check.requerido}`
@@ -98,11 +105,15 @@ async function descontarStockPorVenta(productoId, cantidad = 1) {
   }
 
   // Si el producto ya no tiene insumos suficientes para otra venta, se marca agotado
+  // (solo para productos simples; los productos con variantes de tamaño se gestionan
+  // manualmente ya que un tamaño puede agotarse sin que los demás se agoten)
   const producto = await Producto.findById(productoId);
-  const siguienteCheck = await hayStockSuficiente(productoId, 1);
-  if (!siguienteCheck.ok) {
-    producto.disponible = false;
-    await producto.save();
+  if (!producto.variantes || producto.variantes.length === 0) {
+    const siguienteCheck = await hayStockSuficiente(productoId, 1, varianteNombre);
+    if (!siguienteCheck.ok) {
+      producto.disponible = false;
+      await producto.save();
+    }
   }
 
   return { ok: true };
@@ -111,8 +122,8 @@ async function descontarStockPorVenta(productoId, cantidad = 1) {
 /**
  * Revierte el descuento de stock (ej. si se cancela un item del pedido).
  */
-async function revertirStockPorCancelacion(productoId, cantidad = 1) {
-  const receta = await recetaEfectivaFusionada(productoId);
+async function revertirStockPorCancelacion(productoId, cantidad = 1, varianteNombre = '') {
+  const receta = await recetaEfectivaFusionada(productoId, varianteNombre);
 
   for (const item of receta) {
     const insumo = item.insumo;

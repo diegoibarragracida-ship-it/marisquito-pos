@@ -310,10 +310,11 @@ router.get('/reportes/top-productos', verificarToken, permitirRoles('admin'), as
     for (const p of pedidos) {
       for (const item of p.items) {
         if (item.estado === 'cancelado' || !item.producto) continue;
-        const clave = String(item.producto._id);
-        if (!conteo[clave]) conteo[clave] = { nombre: item.producto.nombre, cantidad: 0, totalVendido: 0 };
+        const clave = String(item.producto._id) + '|' + (item.varianteNombre || '');
+        const nombreMostrado = item.varianteNombre ? `${item.producto.nombre} (${item.varianteNombre})` : item.producto.nombre;
+        if (!conteo[clave]) conteo[clave] = { nombre: nombreMostrado, cantidad: 0, totalVendido: 0 };
         conteo[clave].cantidad += item.cantidad;
-        conteo[clave].totalVendido += item.producto.precio * item.cantidad;
+        conteo[clave].totalVendido += item.precioUnitario * item.cantidad;
       }
     }
 
@@ -353,6 +354,22 @@ router.get('/reportes/margen', verificarToken, permitirRoles('admin'), async (re
 
     const resultado = [];
     for (const p of productos) {
+      if (p.variantes && p.variantes.length > 0) {
+        for (const v of p.variantes) {
+          const receta = await recetaEfectivaFusionada(p._id, v.nombre);
+          const costo = receta.reduce((acc, r) => acc + (r.insumo ? r.insumo.costoUnitario * r.cantidad : 0), 0);
+          const margen = v.precio - costo;
+          const margenPorcentaje = v.precio > 0 ? (margen / v.precio) * 100 : 0;
+          resultado.push({
+            nombre: `${p.nombre} (${v.nombre})`,
+            precio: v.precio,
+            costo: Number(costo.toFixed(2)),
+            margen: Number(margen.toFixed(2)),
+            margenPorcentaje: Number(margenPorcentaje.toFixed(1))
+          });
+        }
+        continue;
+      }
       const receta = await recetaEfectivaFusionada(p._id);
       const costo = receta.reduce((acc, r) => acc + (r.insumo ? r.insumo.costoUnitario * r.cantidad : 0), 0);
       const margen = p.precio - costo;
