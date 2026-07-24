@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cocina — El Marisquito</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="marca">
+    <span class="display">El Marisquito</span>
+    <span class="sub">Cocina</span>
+  </div>
+  <div class="usuario" id="barra-usuario"></div>
+</div>
+
+<div class="contenedor">
+  <div class="encabezado-seccion">
+    <div>
+      <div class="eyebrow">En vivo</div>
+      <h2 class="display">Comandas</h2>
+    </div>
+  </div>
+
+  <div class="grid-comandas" id="grid-comandas">
+    <div class="cargando">Cargando comandas…</div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script>
+  const usuario = exigirSesion(['cocina', 'admin']);
+
+  if (usuario) {
+    pintarBarraSuperior(usuario);
+    cargarComandas();
+    conectarTiempoReal();
+  }
+
+  function conectarTiempoReal() {
+    try {
+      const socket = io();
+      socket.on('nuevoItemPedido', () => cargarComandas());
+      socket.on('itemActualizado', () => cargarComandas());
+    } catch (err) {
+      // Si falla la conexión en vivo, igual seguimos refrescando por polling
+      console.warn('Socket.io no disponible, usando solo actualización periódica');
+    }
+  }
+
+  async function cargarComandas() {
+    const cont = document.getElementById('grid-comandas');
+    try {
+      const comandas = await Api.get('/cocina/comandas');
+      if (comandas.length === 0) {
+        cont.innerHTML = '<div class="comanda-vacia">No hay platillos pendientes ahora mismo 🦐</div>';
+        return;
+      }
+      cont.innerHTML = comandas.map(c => `
+        <div class="comanda-card">
+          <div class="comanda-header">
+            <span class="mesa-num">${c.paraLlevar ? `🥡 Para llevar${c.clienteLlevar ? ' — ' + c.clienteLlevar : ''}` : `Mesa ${c.mesa}`}</span>
+            <button class="btn-imprimir" style="padding:5px 10px; font-size:0.72rem;" onclick='imprimirComanda(${JSON.stringify(c).replace(/'/g, "&apos;")})'>🖨 Imprimir</button>
+          </div>
+          ${c.notaGeneral ? `<div style="padding:8px 16px; background:#fdf6e8; font-size:0.78rem; font-style:italic;">📌 ${c.notaGeneral}</div>` : ''}
+          ${c.items.map(item => `
+            <div class="comanda-item">
+              <div class="nombre-item">
+                <span class="cant">${item.cantidad}×</span>${item.producto ? item.producto.nombre : 'Producto'}
+                ${tiempoEsperaHtml(item.createdAt)}
+              </div>
+              ${item.notas ? `<div class="nota-item">${item.notas}</div>` : ''}
+              ${item.estado === 'pendiente'
+                ? `<button class="btn-avanzar a-preparando" onclick="avanzarEstado('${c.pedidoId}', '${item._id}', 'preparando')">Empezar a preparar</button>`
+                : `<button class="btn-avanzar a-listo" onclick="avanzarEstado('${c.pedidoId}', '${item._id}', 'listo')">Marcar listo</button>`}
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function tiempoEsperaHtml(creadoEn) {
+    if (!creadoEn) return '';
+    const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
+    const tardado = minutos >= 10;
+    return `<span class="tiempo-espera ${tardado ? 'tardado' : ''}">${minutos} min</span>`;
+  }
+
+  async function imprimirComanda(comanda) {
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    const html = `
+      <h2>EL MARISQUITO</h2>
+      <div class="centrado chico">Comanda de cocina — ${hora}</div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print"><strong>${comanda.paraLlevar ? `PARA LLEVAR${comanda.clienteLlevar ? ' — ' + comanda.clienteLlevar : ''}` : `MESA ${comanda.mesa}`}</strong></div>
+      ${comanda.notaGeneral ? `<div class="chico">Nota: ${comanda.notaGeneral}</div>` : ''}
+      <div class="linea-punteada"></div>
+      ${comanda.items.map(item => `
+        <div class="fila-print"><span>${item.cantidad}× ${item.producto ? item.producto.nombre : 'Producto'}</span></div>
+        ${item.notas ? `<div class="chico">— ${item.notas}</div>` : ''}
+      `).join('')}
+      <div class="linea-punteada"></div>
+    `;
+
+    try {
+      await Api.post('/impresion', { tipo: 'comanda', html });
+      mostrarToast('Comanda enviada a la impresora');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function avanzarEstado(pedidoId, itemId, nuevoEstado) {
+    try {
+      await Api.patch(`/cocina/pedidos/${pedidoId}/items/${itemId}/estado`, { estado: nuevoEstado });
+      cargarComandas();
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  // Respaldo por si el socket no conecta, y para refrescar el cronómetro
+  setInterval(cargarComandas, 6000);
+</script>
+</body>
+</html>

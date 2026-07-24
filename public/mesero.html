@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mesas — El Marisquito</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="marca">
+    <span class="display">El Marisquito</span>
+    <span class="sub">Mesero</span>
+  </div>
+  <div class="usuario" id="barra-usuario"></div>
+</div>
+
+<div class="contenedor">
+  <div class="encabezado-seccion">
+    <div>
+      <div class="eyebrow">Salón</div>
+      <h2 class="display">Mapa de mesas</h2>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button class="btn-crear" style="width:auto; padding:9px 18px;" onclick="abrirModalLlevar()">🥡 Nuevo para llevar</button>
+      <div class="categoria-tabs" style="margin-bottom:0;">
+        <button class="categoria-tab activa" id="tab-vista-plano" onclick="cambiarVista('plano')">Plano</button>
+        <button class="categoria-tab" id="tab-vista-lista" onclick="cambiarVista('lista')">Lista</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="plano-leyenda">
+    <span><span class="punto libre"></span>Libre</span>
+    <span><span class="punto ocupada"></span>Ocupada</span>
+    <span><span class="punto cuenta_pedida"></span>Cuenta pedida</span>
+  </div>
+
+  <div class="plano-salon" id="plano-mesero" style="display:none;">
+    <div class="cargando">Cargando plano…</div>
+  </div>
+
+  <div class="grid-mesas" id="grid-mesas">
+    <div class="cargando">Cargando mesas…</div>
+  </div>
+
+  <div class="subseccion-titulo">Para llevar — pedidos activos</div>
+  <div class="grid-mesas" id="grid-llevar">
+    <div class="cargando">Cargando…</div>
+  </div>
+</div>
+
+<!-- Modal: nuevo pedido para llevar -->
+<div class="modal-fondo" id="modal-llevar">
+  <div class="modal-caja">
+    <h3>Nuevo pedido para llevar</h3>
+    <div class="campo-inline" style="margin-top:14px;">
+      <label>Nombre del cliente (opcional)</label>
+      <input type="text" id="input-cliente-llevar" placeholder="Ej. Juan, o 'ventanilla'">
+    </div>
+    <div class="modal-botones">
+      <button class="btn-volver" onclick="cerrarModalLlevar()">Cancelar</button>
+      <button class="btn-principal" onclick="crearPedidoLlevar()">Crear e ir al menú</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/alertas.js"></script>
+<script>
+  const usuario = exigirSesion(['mesero', 'admin']);
+  let vistaActual = 'plano';
+
+  if (usuario) {
+    pintarBarraSuperior(usuario);
+    cambiarVista('plano');
+    cargarLlevar();
+    conectarTiempoReal();
+  }
+
+  function abrirModalLlevar() {
+    document.getElementById('input-cliente-llevar').value = '';
+    document.getElementById('modal-llevar').classList.add('mostrar');
+  }
+
+  function cerrarModalLlevar() {
+    document.getElementById('modal-llevar').classList.remove('mostrar');
+  }
+
+  async function crearPedidoLlevar() {
+    try {
+      const clienteLlevar = document.getElementById('input-cliente-llevar').value.trim();
+      const pedido = await Api.post('/pedidos/llevar', { clienteLlevar });
+      window.location.href = `/pedido.html?llevar=${pedido._id}`;
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function cargarLlevar() {
+    const cont = document.getElementById('grid-llevar');
+    try {
+      const pedidos = await Api.get('/pedidos/llevar/activos');
+      if (pedidos.length === 0) {
+        cont.innerHTML = '<div class="ticket-vacio">No hay pedidos para llevar activos</div>';
+        return;
+      }
+      cont.innerHTML = pedidos.map(p => {
+        const total = p.items.filter(i => i.estado !== 'cancelado').reduce((acc, i) => acc + (i.producto ? i.producto.precio * i.cantidad : 0), 0);
+        return `
+          <div class="mesa-card ocupada">
+            <div class="numero">🥡</div>
+            <div class="estado">${p.clienteLlevar || 'Sin nombre'} · $${total.toFixed(2)}</div>
+            <button onclick="window.location.href='/pedido.html?llevar=${p._id}'">Ver pedido</button>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      cont.innerHTML = '<div class="ticket-vacio">No se pudo cargar</div>';
+    }
+  }
+
+  function conectarTiempoReal() {
+    try {
+      const socket = io();
+      socket.on('itemActualizado', (data) => {
+        if (data.estado === 'listo') {
+          alertarPlatilloListo(`Mesa ${data.mesaNumero}: ¡${data.nombreProducto} está listo! 🍽`);
+        }
+      });
+    } catch (err) {
+      console.warn('Socket.io no disponible en el mapa de mesas');
+    }
+  }
+
+  function cambiarVista(vista) {
+    vistaActual = vista;
+    document.getElementById('tab-vista-plano').classList.toggle('activa', vista === 'plano');
+    document.getElementById('tab-vista-lista').classList.toggle('activa', vista === 'lista');
+    document.getElementById('plano-mesero').style.display = vista === 'plano' ? 'block' : 'none';
+    document.getElementById('grid-mesas').style.display = vista === 'lista' ? 'grid' : 'none';
+    cargarMesas();
+  }
+
+  async function cargarMesas() {
+    try {
+      const mesas = await Api.get('/mesas');
+
+      if (mesas.length === 0) {
+        document.getElementById('plano-mesero').innerHTML = '<div class="plano-vacio">Aún no hay mesas registradas. Pídele al admin que las cree.</div>';
+        document.getElementById('grid-mesas').innerHTML = '<div class="ticket-vacio">Aún no hay mesas registradas.</div>';
+        return;
+      }
+
+      if (vistaActual === 'plano') {
+        document.getElementById('plano-mesero').innerHTML = mesas.map(mesa => `
+          <div class="mesa-plano ${mesa.forma} ${mesa.estado}" style="left:${mesa.posX}%; top:${mesa.posY}%;" onclick="abrirMesa('${mesa._id}', '${mesa.estado}')">
+            <div>${mesa.numero}</div>
+            <div class="cap-mini">${mesa.capacidad}p</div>
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('grid-mesas').innerHTML = mesas.map(mesa => `
+          <div class="mesa-card ${mesa.estado}">
+            <div class="numero">${mesa.numero}</div>
+            <div class="estado">${estadoLegible(mesa.estado)}</div>
+            <button onclick="abrirMesa('${mesa._id}', '${mesa.estado}')">
+              ${mesa.estado === 'libre' ? 'Ocupar' : 'Ver pedido'}
+            </button>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function estadoLegible(estado) {
+    const mapa = {
+      libre: 'Libre',
+      ocupada: 'Ocupada',
+      cuenta_pedida: 'Cuenta pedida',
+      reservada: 'Reservada'
+    };
+    return mapa[estado] || estado;
+  }
+
+  async function abrirMesa(mesaId, estadoActual) {
+    try {
+      if (estadoActual === 'libre') {
+        await Api.patch(`/mesas/${mesaId}/ocupar`, {});
+        await Api.post('/pedidos', { mesaId });
+      }
+      window.location.href = `/pedido.html?mesa=${mesaId}`;
+    } catch (err) {
+      mostrarToast(err.message, true);
+      // Si ya existe un pedido abierto, igual lo mandamos a ver el pedido
+      if (err.message.includes('Ya existe un pedido abierto')) {
+        window.location.href = `/pedido.html?mesa=${mesaId}`;
+      }
+    }
+  }
+
+  // Refresca el mapa cada 8 segundos para reflejar cambios de otros meseros
+  setInterval(cargarMesas, 8000);
+  setInterval(cargarLlevar, 8000);
+</script>
+</body>
+</html>

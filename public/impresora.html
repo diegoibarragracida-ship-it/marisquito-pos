@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estación de impresión — El Marisquito</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .estacion-wrap {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 30px;
+  }
+  .estado-punto {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--alga);
+    display: inline-block;
+    margin-right: 8px;
+    animation: pulso 1.6s infinite;
+  }
+  @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .log-impresiones {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 460px;
+    text-align: left;
+  }
+  .log-fila {
+    background: var(--blanco);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    box-shadow: var(--sombra);
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="marca">
+    <span class="display">El Marisquito</span>
+    <span class="sub">Estación de impresión</span>
+  </div>
+  <div class="usuario" id="barra-usuario"></div>
+</div>
+
+<div class="estacion-wrap">
+  <h2 class="display" style="color:var(--oceano);">
+    <span class="estado-punto"></span>Esperando comandas y tickets…
+  </h2>
+  <p style="opacity:0.65; max-width:420px;">
+    Deja esta pantalla abierta en la computadora conectada a la impresora.
+    En cuanto llegue una comanda o un ticket, se imprimirá aquí automáticamente.
+  </p>
+  <div class="log-impresiones" id="log-impresiones"></div>
+</div>
+
+<!-- Zona invisible que solo se muestra al imprimir -->
+<div class="zona-imprimible" id="zona-imprimible-auto"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script>
+  const usuario = exigirSesion(['admin', 'cajero', 'cocina']);
+  let procesando = false;
+
+  if (usuario) {
+    pintarBarraSuperior(usuario);
+    revisarPendientes();
+    conectarTiempoReal();
+    setInterval(revisarPendientes, 5000); // respaldo por si el socket se cae
+  }
+
+  function conectarTiempoReal() {
+    try {
+      const socket = io();
+      socket.on('nuevaImpresion', () => revisarPendientes());
+    } catch (err) {
+      console.warn('Socket.io no disponible, usando solo el respaldo periódico');
+    }
+  }
+
+  async function revisarPendientes() {
+    if (procesando) return; // evita mandar varios window.print() encimados
+    try {
+      const pendientes = await Api.get('/impresion/pendientes');
+      if (pendientes.length === 0) return;
+
+      procesando = true;
+      for (const trabajo of pendientes) {
+        await imprimirTrabajo(trabajo);
+      }
+      procesando = false;
+    } catch (err) {
+      procesando = false;
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function imprimirTrabajo(trabajo) {
+    return new Promise((resolve) => {
+      const zona = document.getElementById('zona-imprimible-auto');
+      zona.innerHTML = trabajo.html;
+
+      window.print();
+
+      // Después de imprimir (o cancelar), marcamos como impreso y seguimos con el siguiente
+      setTimeout(async () => {
+        try {
+          await Api.patch(`/impresion/${trabajo._id}/impreso`, {});
+          agregarAlLog(trabajo);
+        } catch (err) {
+          console.error(err);
+        }
+        resolve();
+      }, 800);
+    });
+  }
+
+  function agregarAlLog(trabajo) {
+    const cont = document.getElementById('log-impresiones');
+    const fila = document.createElement('div');
+    fila.className = 'log-fila';
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    fila.innerHTML = `<span>${trabajo.tipo === 'comanda' ? '🍽 Comanda' : '🧾 Ticket'} impreso</span><span>${hora}</span>`;
+    cont.prepend(fila);
+  }
+</script>
+</body>
+</html>

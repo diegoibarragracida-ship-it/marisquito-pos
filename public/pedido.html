@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedido — El Marisquito</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="marca">
+    <span class="display">El Marisquito</span>
+    <span class="sub" id="sub-mesa">Mesero</span>
+  </div>
+  <div class="usuario" id="barra-usuario"></div>
+</div>
+
+<div class="contenedor">
+  <div class="encabezado-seccion">
+    <div>
+      <div class="eyebrow" id="eyebrow-pedido">Mesa</div>
+      <h2 class="display" id="titulo-mesa">Cargando…</h2>
+    </div>
+    <button class="btn-volver" style="padding:9px 18px; font-weight:600;" onclick="window.location.href='/mesero.html'">← Volver al salón</button>
+  </div>
+
+  <div class="vista-pedido">
+    <!-- Menú -->
+    <div>
+      <div class="categoria-tabs" id="categoria-tabs"></div>
+      <div class="grid-menu" id="grid-menu">
+        <div class="cargando">Cargando menú…</div>
+      </div>
+    </div>
+
+    <!-- Ticket de comanda -->
+    <div class="ticket">
+      <div class="ticket-header">
+        <div class="display">Comanda</div>
+        <div class="mesa-num" id="ticket-mesa-num">Mesa —</div>
+      </div>
+      <div class="campo-inline" id="bloque-cliente-llevar" style="display:none; margin-bottom:8px;">
+        <label>Nombre del cliente</label>
+        <input type="text" id="cliente-llevar-texto" placeholder="Ej. Juan, o 'ventanilla'" onblur="guardarClienteLlevar()">
+      </div>
+      <div class="nota-general-caja">
+        <strong>Nota del pedido</strong>
+        <textarea id="nota-general-texto" placeholder="Ej. cliente alérgico a mariscos, es cumpleaños..." onblur="guardarNotaGeneral()"></textarea>
+      </div>
+      <div id="ticket-items">
+        <div class="ticket-vacio">Aún no hay productos agregados</div>
+      </div>
+      <div class="ticket-footer">
+        <span>Total</span>
+        <span id="ticket-total">$0.00</span>
+      </div>
+      <div class="ticket-acciones">
+        <button class="btn-volver" onclick="cargarPedido()">Actualizar</button>
+        <button class="btn-cuenta" id="btn-pedir-cuenta" onclick="pedirCuenta()">Pedir cuenta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para notas del producto -->
+<div class="modal-fondo" id="modal-notas">
+  <div class="modal-caja">
+    <h3>Agregar nota</h3>
+    <p style="font-size:0.85rem; opacity:0.7;" id="modal-producto-nombre"></p>
+    <textarea id="modal-nota-texto" placeholder="Ej. sin cebolla, extra picante..."></textarea>
+    <div class="modal-botones">
+      <button class="btn-volver" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-principal" onclick="confirmarAgregar()">Agregar a la comanda</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/alertas.js"></script>
+<script>
+  const usuario = exigirSesion(['mesero', 'admin']);
+  const params = new URLSearchParams(window.location.search);
+  const mesaId = params.get('mesa');
+  const llevarId = params.get('llevar');
+  const esLlevar = !!llevarId;
+
+  let productos = [];
+  let categorias = [];
+  let categoriaActiva = 'todas';
+  let pedidoActual = null;
+  let productoParaAgregar = null;
+
+  if (usuario && (mesaId || llevarId)) {
+    pintarBarraSuperior(usuario);
+    if (esLlevar) {
+      document.getElementById('eyebrow-pedido').textContent = 'Para llevar';
+      document.getElementById('bloque-cliente-llevar').style.display = 'block';
+      document.getElementById('btn-pedir-cuenta').style.display = 'none';
+    }
+    init();
+    conectarTiempoReal();
+  } else if (!mesaId && !llevarId) {
+    window.location.href = '/mesero.html';
+  }
+
+  function conectarTiempoReal() {
+    try {
+      const socket = io();
+      socket.on('itemActualizado', (data) => {
+        const esDeEstePedido = esLlevar ? (pedidoActual && data.pedidoId === pedidoActual._id) : data.mesaId === mesaId;
+        if (esDeEstePedido && data.estado === 'listo') {
+          alertarPlatilloListo(`¡${data.nombreProducto} está listo! 🍽`);
+          cargarPedido();
+        }
+      });
+    } catch (err) {
+      console.warn('Socket.io no disponible, usando solo actualización periódica');
+    }
+  }
+
+  async function init() {
+    await Promise.all([cargarMenu(), cargarPedido()]);
+  }
+
+  async function cargarMenu() {
+    try {
+      const [prods, cats] = await Promise.all([
+        Api.get('/admin/productos'),
+        Api.get('/categorias')
+      ]);
+      productos = prods;
+      categorias = cats;
+      pintarTabsCategorias();
+      pintarMenu();
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function pintarTabsCategorias() {
+    const cont = document.getElementById('categoria-tabs');
+    const tabs = [{ _id: 'todas', nombre: 'Todas' }, ...categorias];
+    cont.innerHTML = tabs.map(c => `
+      <button class="categoria-tab ${categoriaActiva === c._id ? 'activa' : ''}" onclick="seleccionarCategoria('${c._id}')">
+        ${c.nombre}
+      </button>
+    `).join('');
+  }
+
+  function seleccionarCategoria(id) {
+    categoriaActiva = id;
+    pintarTabsCategorias();
+    pintarMenu();
+  }
+
+  function pintarMenu() {
+    const cont = document.getElementById('grid-menu');
+    const lista = productos.filter(p => {
+      if (categoriaActiva === 'todas') return true;
+      return p.categoria && p.categoria._id === categoriaActiva;
+    });
+
+    if (lista.length === 0) {
+      cont.innerHTML = '<div class="ticket-vacio">No hay productos en esta categoría</div>';
+      return;
+    }
+
+    cont.innerHTML = lista.map(p => `
+      <div class="producto-card ${p.disponible ? '' : 'agotado'}">
+        ${p.foto ? `<img class="foto-producto" src="${p.foto}" alt="">` : ''}
+        <span class="nombre">${p.esPaquete ? '📦 ' : ''}${p.nombre}</span>
+        <span class="precio">$${p.precio.toFixed(2)}</span>
+        <button ${p.disponible ? '' : 'disabled'} onclick="abrirModalNotas('${p._id}', '${p.nombre.replace(/'/g, "\\'")}')">
+          ${p.disponible ? 'Agregar' : 'Agotado'}
+        </button>
+      </div>
+    `).join('');
+  }
+
+  function abrirModalNotas(productoId, nombre) {
+    productoParaAgregar = productoId;
+    document.getElementById('modal-producto-nombre').textContent = nombre;
+    document.getElementById('modal-nota-texto').value = '';
+    document.getElementById('modal-notas').classList.add('mostrar');
+  }
+
+  function cerrarModal() {
+    document.getElementById('modal-notas').classList.remove('mostrar');
+    productoParaAgregar = null;
+  }
+
+  async function confirmarAgregar() {
+    if (!productoParaAgregar || !pedidoActual) return;
+    const notas = document.getElementById('modal-nota-texto').value.trim();
+
+    try {
+      await Api.post(`/pedidos/${pedidoActual._id}/items`, {
+        productoId: productoParaAgregar,
+        cantidad: 1,
+        notas
+      });
+      mostrarToast('Producto agregado a la comanda');
+      cerrarModal();
+      await Promise.all([cargarMenu(), cargarPedido()]);
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function cargarPedido() {
+    try {
+      const anterior = pedidoActual;
+      pedidoActual = esLlevar
+        ? await Api.get(`/pedidos/${llevarId}`)
+        : await Api.get(`/pedidos/mesa/${mesaId}/actual`);
+      detectarPlatillosListos(anterior, pedidoActual);
+
+      const titulo = esLlevar ? `🥡 Para llevar${pedidoActual.clienteLlevar ? ' — ' + pedidoActual.clienteLlevar : ''}` : `Mesa ${pedidoActual.mesa.numero}`;
+      document.getElementById('titulo-mesa').textContent = titulo;
+      document.getElementById('ticket-mesa-num').textContent = esLlevar ? '🥡 Para llevar' : `Mesa ${pedidoActual.mesa.numero}`;
+      document.getElementById('sub-mesa').textContent = esLlevar ? 'Para llevar' : `Mesa ${pedidoActual.mesa.numero}`;
+
+      const campoNota = document.getElementById('nota-general-texto');
+      if (document.activeElement !== campoNota) {
+        campoNota.value = pedidoActual.notaGeneral || '';
+      }
+      if (esLlevar) {
+        const campoCliente = document.getElementById('cliente-llevar-texto');
+        if (document.activeElement !== campoCliente) {
+          campoCliente.value = pedidoActual.clienteLlevar || '';
+        }
+      }
+      pintarTicket();
+    } catch (err) {
+      mostrarToast(esLlevar ? 'No se encontró el pedido' : 'No se encontró un pedido abierto para esta mesa', true);
+    }
+  }
+
+  async function guardarClienteLlevar() {
+    if (!pedidoActual) return;
+    const clienteLlevar = document.getElementById('cliente-llevar-texto').value;
+    try {
+      await Api.patch(`/pedidos/${pedidoActual._id}/cliente-llevar`, { clienteLlevar });
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function pintarTicket() {
+    const cont = document.getElementById('ticket-items');
+    const items = pedidoActual.items || [];
+
+    if (items.length === 0) {
+      cont.innerHTML = '<div class="ticket-vacio">Aún no hay productos agregados</div>';
+      document.getElementById('ticket-total').textContent = '$0.00';
+      return;
+    }
+
+    let total = 0;
+    cont.innerHTML = items.map(item => {
+      const activo = item.estado !== 'cancelado';
+      if (activo) total += item.producto.precio * item.cantidad;
+      return `
+        <div class="ticket-item">
+          <div class="info">
+            <span class="cantidad">${item.cantidad}×</span>${item.producto.nombre}
+            ${item.notas ? `<div style="font-size:0.75rem; opacity:0.65;">${item.notas}</div>` : ''}
+            <div><span class="estado-chip ${item.estado}">${item.estado}</span></div>
+          </div>
+          <div style="text-align:right;">
+            <div class="precio-linea">$${(item.producto.precio * item.cantidad).toFixed(2)}</div>
+            ${activo ? `<button class="btn-cancelar" onclick="cancelarItem('${item._id}')">Cancelar</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('ticket-total').textContent = `$${total.toFixed(2)}`;
+  }
+
+  function detectarPlatillosListos(anterior, nuevo) {
+    if (!anterior || !nuevo) return;
+    for (const item of nuevo.items) {
+      if (item.estado !== 'listo') continue;
+      const itemAntes = anterior.items.find(i => i._id === item._id);
+      if (itemAntes && itemAntes.estado !== 'listo') {
+        alertarPlatilloListo(`¡${item.producto.nombre} está listo! 🍽`);
+      }
+    }
+  }
+
+  async function cancelarItem(itemId) {
+    if (!confirm('¿Cancelar este producto? Se repondrá el stock.')) return;
+    try {
+      await Api.patch(`/pedidos/${pedidoActual._id}/items/${itemId}/cancelar`, {});
+      mostrarToast('Producto cancelado');
+      await Promise.all([cargarMenu(), cargarPedido()]);
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function pedirCuenta() {
+    try {
+      await Api.patch(`/mesas/${mesaId}/pedir-cuenta`, {});
+      mostrarToast('Cuenta pedida — la caja puede cobrar cuando quieras');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function guardarNotaGeneral() {
+    if (!pedidoActual) return;
+    const notaGeneral = document.getElementById('nota-general-texto').value;
+    try {
+      await Api.patch(`/pedidos/${pedidoActual._id}/nota`, { notaGeneral });
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  // Refresca la comanda cada 6s para ver cambios de estado que hace cocina
+  setInterval(cargarPedido, 6000);
+</script>
+</body>
+</html>
