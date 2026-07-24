@@ -194,20 +194,38 @@
   }
 
   // Modificadores rápidos para agilizar la toma de pedido (en vez de escribir
-  // a mano). Se eligen tocando los botones y se arman como texto en la nota.
+  // a mano). Cada tipo de platillo tiene los suyos — no todos llevan cebolla,
+  // limón o cilantro. Se revisa primero el NOMBRE (para casos específicos como
+  // "al gusto", tostadas, tortas, carnes...) y si nada coincide, se usa un
+  // default razonable según la CATEGORÍA.
+  const MODS_POR_PATRON = [
+    // "Al gusto" = el cliente elige la preparación
+    { patron: /al gusto/i, mods: ['Al mojo de ajo', 'A la diabla', 'Al ajillo', 'Empanizado', 'A la plancha', 'A la veracruzana', 'Para llevar'] },
+    { patron: /coctel|cóctel|vuelve a la vida/i, mods: ['Sin cebolla', 'Sin cilantro', 'Sin limón', 'Extra salsa', 'Extra picante', 'Para llevar'] },
+    { patron: /guacamole/i, mods: ['Sin cebolla', 'Sin cilantro', 'Sin limón', 'Extra chile', 'Para llevar'] },
+    { patron: /tostada/i, mods: ['Sin cebolla', 'Sin lechuga', 'Extra limón', 'Extra picante', 'Para llevar'] },
+    { patron: /torta/i, mods: ['Sin mayonesa', 'Sin aguacate', 'Extra queso', 'Para llevar'] },
+    { patron: /ensalada/i, mods: ['Aderezo aparte', 'Sin cebolla', 'Sin jitomate', 'Para llevar'] },
+    { patron: /caldo|cazuela|chilpachole|sopa/i, mods: ['Sin picante', 'Extra picante', 'Sin cebolla', 'Para llevar'] },
+    { patron: /filete|milanesa|pechuga|arrachera|tampiqueña/i, mods: ['Bien cocido', 'Término medio', 'Tres cuartos', 'Sin ajo', 'Extra salsa', 'Para llevar'] },
+    { patron: /papas/i, mods: ['Con catsup', 'Con mayonesa', 'Sin sal', 'Para llevar'] },
+    { patron: /frijol/i, mods: ['Extra queso', 'Para llevar'] },
+    { patron: /licuado|horchata|jamaica|chocomilk/i, mods: ['Sin hielo', 'Extra hielo', 'Poca azúcar', 'Para llevar'] },
+    { patron: /café|nescafé|chocolate|^té$/i, mods: ['Poca azúcar', 'Extra caliente', 'Con leche extra', 'Para llevar'] }
+  ];
+  const MODS_POR_CATEGORIA = {
+    'Refrescos': ['Bien fría', 'Con limón', 'Para llevar'],
+    'Cervezas': ['Bien fría', 'Con limón', 'Chelada', 'Para llevar'],
+    'Postres': ['Sin crema', 'Extra crema', 'Para llevar'],
+    'Extras': ['Extra picante', 'Para llevar'],
+    'Entradas': ['Extra picante', 'Para llevar']
+  };
   function modificadoresPara(p) {
+    for (const regla of MODS_POR_PATRON) {
+      if (regla.patron.test(p.nombre)) return regla.mods;
+    }
     const nombreCategoria = p.categoria && p.categoria.nombre;
-    const base = ['Sin cebolla', 'Sin limón', 'Sin cilantro', 'Sin catsup', 'Sin chile', 'Extra salsa', 'Para llevar'];
-    if (nombreCategoria === 'Carnes' || /filete|milanesa|pechuga/i.test(p.nombre)) {
-      return ['Sin cebolla', 'Sin catsup', 'Bien cocido', 'Término medio', 'Extra salsa', 'Para llevar'];
-    }
-    if (['Bebidas', 'Refrescos', 'Cervezas'].includes(nombreCategoria)) {
-      return ['Sin hielo', 'Extra hielo', 'Para llevar'];
-    }
-    if (nombreCategoria === 'Postres') {
-      return ['Sin crema', 'Para llevar'];
-    }
-    return base;
+    return MODS_POR_CATEGORIA[nombreCategoria] || ['Para llevar'];
   }
 
   function pintarMenu() {
@@ -227,8 +245,10 @@
       const precioMostrado = tieneVariantes
         ? `Desde $${Math.min(...p.variantes.map(v => v.precio)).toFixed(2)}`
         : `$${p.precio.toFixed(2)}`;
+      const color = colorDelProducto(p);
       return `
-      <div class="producto-card ${p.disponible ? '' : 'agotado'}" style="border-left: 5px solid ${colorDelProducto(p)};">
+      <div class="producto-card ${p.disponible ? '' : 'agotado'}" style="border: 3px solid ${color}; box-shadow: 0 0 0 1px ${color}55, var(--sombra); padding-top:0; overflow:hidden;">
+        <div style="background:${color}; height:8px; margin:-14px -14px 6px -14px;"></div>
         ${p.foto ? `<img class="foto-producto" src="${p.foto}" alt="">` : ''}
         <span class="nombre">${p.esPaquete ? '📦 ' : ''}${p.nombre}</span>
         <span class="precio">${precioMostrado}</span>
