@@ -221,6 +221,9 @@
     'Entradas': ['Extra picante', 'Para llevar']
   };
   function modificadoresPara(p) {
+    // Si el admin definió modificadores personalizados para este producto, esos mandan.
+    if (p.modificadores && p.modificadores.length > 0) return p.modificadores;
+
     for (const regla of MODS_POR_PATRON) {
       if (regla.patron.test(p.nombre)) return regla.mods;
     }

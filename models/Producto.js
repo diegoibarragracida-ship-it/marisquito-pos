@@ -47,7 +47,11 @@ const productoSchema = new mongoose.Schema({
     cantidad: { type: Number, default: 1 }
   }],
   receta: [recetaItemSchema],
-  foto: String
+  foto: String,
+  modificadores: {
+    type: [String], // botones rápidos para el mesero, ej. "Sin cebolla", "Extra picante"
+    default: [] // vacío = el mesero ve los modificadores automáticos según el nombre/categoría del platillo
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Producto', productoSchema);

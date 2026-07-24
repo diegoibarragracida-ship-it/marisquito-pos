@@ -125,6 +125,11 @@
               <p style="font-size:0.72rem; opacity:0.6; margin-top:-6px; margin-bottom:12px;">La receta/insumos de cada tamaño se asigna después desde Inventario &gt; Recetas.</p>
             </div>
             <div class="campo-inline">
+              <label>Modificadores rápidos (opcional)</label>
+              <input type="text" id="prod-modificadores" placeholder="Ej. Sin cebolla, Extra picante, Para llevar">
+              <p style="font-size:0.72rem; opacity:0.6; margin-top:4px;">Sepáralos con comas. Estos son los botones que verá el mesero para este platillo (ej. "sin cebolla", "sin cilantro", "extra picante"). Si lo dejas vacío, el sistema sugiere unos automáticos según el nombre/categoría del platillo.</p>
+            </div>
+            <div class="campo-inline">
               <label>Foto (opcional)</label>
               <input type="file" id="prod-foto" accept="image/png, image/jpeg, image/webp">
             </div>
@@ -543,7 +548,10 @@
       <div class="cargando">Cargando…</div>
     </div>
 
-    <div class="subseccion-titulo">Margen de ganancia por producto</div>
+    <div class="subseccion-titulo" style="display:flex; align-items:center; justify-content:space-between;">
+      <span>Margen de ganancia por producto</span>
+      <button type="button" class="btn-mini-toggle" id="btn-toggle-margen" onclick="toggleMargen()" style="font-size:0.72rem;">Ocultar</button>
+    </div>
     <div class="tabla-reporte" id="tabla-margen">
       <div class="cargando">Cargando…</div>
     </div>
@@ -551,6 +559,40 @@
     <div class="subseccion-titulo">Mermas registradas (últimos 30 días)</div>
     <div class="tabla-reporte" id="tabla-mermas">
       <div class="cargando">Cargando…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: editar producto (nombre, categoría, precio/tamaños, modificadores) -->
+<div class="modal-fondo" id="modal-editar-producto">
+  <div class="modal-caja" style="max-width:440px;">
+    <h3>Editar producto</h3>
+    <input type="hidden" id="edit-prod-id">
+    <div class="campo-inline">
+      <label>Nombre</label>
+      <input type="text" id="edit-prod-nombre">
+    </div>
+    <div class="campo-inline">
+      <label>Categoría</label>
+      <select id="edit-prod-categoria"></select>
+    </div>
+    <div class="campo-inline" id="edit-campo-precio-simple">
+      <label>Precio</label>
+      <input type="number" id="edit-prod-precio" min="0" step="0.01">
+    </div>
+    <div id="edit-bloque-tamanos" style="display:none;">
+      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:6px;">Precios por tamaño</label>
+      <div id="edit-tamanos-lineas"></div>
+      <button type="button" class="btn-agregar-linea" onclick="agregarLineaTamanoEdit()">+ Agregar tamaño</button>
+    </div>
+    <div class="campo-inline">
+      <label>Modificadores rápidos (opcional)</label>
+      <input type="text" id="edit-prod-modificadores" placeholder="Ej. Sin cebolla, Extra picante, Para llevar">
+      <p style="font-size:0.72rem; opacity:0.6; margin-top:4px;">Sepáralos con comas. Vacío = modificadores automáticos.</p>
+    </div>
+    <div class="modal-botones">
+      <button type="button" class="btn-crear" onclick="guardarEdicionProducto()">Guardar cambios</button>
+      <button type="button" class="btn-volver" onclick="cerrarEditarProducto()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -872,6 +914,8 @@
     if (select) select.innerHTML = opciones;
     const selectPaq = document.getElementById('paq-categoria');
     if (selectPaq) selectPaq.innerHTML = opciones;
+    const selectEdit = document.getElementById('edit-prod-categoria');
+    if (selectEdit) selectEdit.innerHTML = opciones;
   }
 
   async function crearCategoria(e) {
@@ -1103,6 +1147,78 @@
     cont.appendChild(linea);
   }
 
+  /* ---------------- EDITAR PRODUCTO (nombre, precio, modificadores) ---------------- */
+  function abrirEditarProducto(id) {
+    const p = productosCache.find(x => x._id === id);
+    if (!p) return;
+
+    document.getElementById('edit-prod-id').value = p._id;
+    document.getElementById('edit-prod-nombre').value = p.nombre;
+    document.getElementById('edit-prod-categoria').value = p.categoria ? p.categoria._id : '';
+    document.getElementById('edit-prod-modificadores').value = (p.modificadores || []).join(', ');
+
+    const tieneVariantes = p.variantes && p.variantes.length > 0;
+    document.getElementById('edit-campo-precio-simple').style.display = tieneVariantes ? 'none' : 'block';
+    document.getElementById('edit-bloque-tamanos').style.display = tieneVariantes ? 'block' : 'none';
+
+    if (tieneVariantes) {
+      const cont = document.getElementById('edit-tamanos-lineas');
+      cont.innerHTML = '';
+      p.variantes.forEach(v => agregarLineaTamanoEdit(v.nombre, v.precio));
+    } else {
+      document.getElementById('edit-prod-precio').value = p.precio || 0;
+    }
+
+    document.getElementById('modal-editar-producto').classList.add('mostrar');
+  }
+
+  function cerrarEditarProducto() {
+    document.getElementById('modal-editar-producto').classList.remove('mostrar');
+  }
+
+  function agregarLineaTamanoEdit(nombreSugerido, precioSugerido) {
+    const cont = document.getElementById('edit-tamanos-lineas');
+    const linea = document.createElement('div');
+    linea.className = 'receta-linea';
+    linea.innerHTML = `
+      <input type="text" placeholder="Nombre (ej. Chico)" class="edit-tamano-nombre" value="${nombreSugerido || ''}">
+      <input type="number" placeholder="Precio" class="edit-tamano-precio" min="0" step="0.01" value="${precioSugerido != null ? precioSugerido : ''}">
+      <button type="button" onclick="this.parentElement.remove()">✕</button>
+    `;
+    cont.appendChild(linea);
+  }
+
+  async function guardarEdicionProducto() {
+    const id = document.getElementById('edit-prod-id').value;
+    const tieneVariantes = document.getElementById('edit-bloque-tamanos').style.display !== 'none';
+
+    const body = {
+      nombre: document.getElementById('edit-prod-nombre').value.trim(),
+      categoria: document.getElementById('edit-prod-categoria').value,
+      modificadores: document.getElementById('edit-prod-modificadores').value
+        .split(',').map(m => m.trim()).filter(Boolean)
+    };
+
+    if (tieneVariantes) {
+      body.variantes = Array.from(document.querySelectorAll('#edit-tamanos-lineas .receta-linea')).map(linea => ({
+        nombre: linea.querySelector('.edit-tamano-nombre').value.trim(),
+        precio: Number(linea.querySelector('.edit-tamano-precio').value) || 0,
+        receta: []
+      })).filter(v => v.nombre);
+    } else {
+      body.precio = Number(document.getElementById('edit-prod-precio').value);
+    }
+
+    try {
+      await Api.put(`/admin/productos/${id}`, body);
+      mostrarToast('Producto actualizado');
+      cerrarEditarProducto();
+      cargarProductos();
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
   /* ---------------- PRODUCTOS (Menú) ---------------- */
   function inicializarFormProductos() {
     // ya no hay líneas de receta aquí; eso vive en Inventario > Recetas
@@ -1135,6 +1251,7 @@
                 Foto
                 <input type="file" accept="image/png, image/jpeg, image/webp" style="display:none;" onchange="subirFotoExistente('${p._id}', this.files[0])">
               </label>
+              <button class="btn-mini-editar" onclick="abrirEditarProducto('${p._id}')">Editar</button>
               <button class="btn-mini-toggle" onclick="toggleDisponibilidad('${p._id}', ${p.disponible})">
                 ${p.disponible ? 'Marcar agotado' : 'Marcar disponible'}
               </button>
@@ -1180,6 +1297,8 @@
       } else {
         body.precio = Number(document.getElementById('prod-precio').value);
       }
+      body.modificadores = document.getElementById('prod-modificadores').value
+        .split(',').map(m => m.trim()).filter(Boolean);
 
       const nuevo = await Api.post('/admin/productos', body);
 
@@ -1446,6 +1565,19 @@
     } catch (err) {
       mostrarToast(err.message, true);
     }
+  }
+
+  function toggleMargen(forzarEstado) {
+    const tabla = document.getElementById('tabla-margen');
+    const btn = document.getElementById('btn-toggle-margen');
+    const ocultar = forzarEstado !== undefined ? forzarEstado : tabla.style.display !== 'none';
+    tabla.style.display = ocultar ? 'none' : 'block';
+    btn.textContent = ocultar ? 'Mostrar' : 'Ocultar';
+    localStorage.setItem('margenOculto', ocultar ? '1' : '0');
+  }
+  // Recuerda si el admin lo dejó oculto la última vez (ej. si alguien más puede ver la pantalla)
+  if (localStorage.getItem('margenOculto') === '1') {
+    document.addEventListener('DOMContentLoaded', () => toggleMargen(true));
   }
 
   async function cargarMermas() {
