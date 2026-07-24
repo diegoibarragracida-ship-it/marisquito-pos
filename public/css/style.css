@@ -65,6 +65,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 14px 22px;
   box-shadow: var(--sombra);
   position: sticky;
@@ -910,6 +912,18 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-weight: 700;
 }
 .btn-imprimir:hover { background: #060e0d; }
+
+/* ---------- Ajustes para celular (pantallas angostas) ---------- */
+@media (max-width: 480px) {
+  .contenedor { padding: 18px 14px 50px; }
+  .topbar { padding: 10px 14px; }
+  .topbar .marca .display { font-size: 1.1rem; }
+  .encabezado-seccion .display { font-size: 1.25rem; }
+  .grid-menu { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .grid-mesas { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  .mesa-plano { width: 50px; height: 50px; font-size: 0.9rem; }
+  .panel-layout, .vista-pedido { gap: 14px; }
+}
 
 /* =========================================================
    IMPRESIÓN — formato angosto para impresora térmica (58mm)
