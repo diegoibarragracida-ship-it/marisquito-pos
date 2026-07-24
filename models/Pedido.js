@@ -66,6 +66,11 @@ const pedidoSchema = new mongoose.Schema({
   total: {
     type: Number,
     default: 0
+  },
+  metodoPago: {
+    type: String,
+    enum: ['efectivo', 'tarjeta', 'mixto', null],
+    default: null
   }
 }, { timestamps: true });
 

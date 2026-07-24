@@ -72,7 +72,11 @@
       <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Elige el tamaño</label>
       <div id="variantes-opciones" class="variantes-opciones"></div>
     </div>
-    <textarea id="modal-nota-texto" placeholder="Ej. sin cebolla, extra picante..."></textarea>
+    <div id="bloque-modificadores" style="margin-bottom:10px;">
+      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Toca lo que se ofrezca (opcional)</label>
+      <div id="modificadores-opciones" class="variantes-opciones"></div>
+    </div>
+    <textarea id="modal-nota-texto" placeholder="¿Algo más? Escríbelo aquí (opcional)"></textarea>
     <div class="modal-botones">
       <button class="btn-volver" onclick="cerrarModal()">Cancelar</button>
       <button class="btn-principal" onclick="confirmarAgregar()">Agregar a la comanda</button>
@@ -160,6 +164,52 @@
     pintarMenu();
   }
 
+  // Colores de contorno por tipo de platillo, para que los meseros ubiquen
+  // rápido qué es qué. Primero se revisa el NOMBRE del producto (para que
+  // "Filete Sol" salga del color de filetes aunque esté en Especialidades,
+  // o "Chilpachole de jaiba" salga del color de caldos), y si no coincide
+  // ningún patrón, se usa el color de su CATEGORÍA.
+  const COLOR_POR_PATRON = [
+    { patron: /tostada/i, color: '#8a5a35' },                         // café
+    { patron: /caldo|cazuela|chilpachole|sopa/i, color: '#c0392b' },  // rojo
+    { patron: /filete/i, color: '#2471a3' }                           // azul
+  ];
+  const COLOR_POR_CATEGORIA = {
+    'Cocteles': '#2e8b57',       // verde
+    'Entradas': '#d68910',       // naranja
+    'Especialidades': '#7d3c98', // morado
+    'Carnes': '#922b21',         // vino/marrón rojizo
+    'Extras': '#7f8c8d',         // gris
+    'Postres': '#c2185b',        // rosa
+    'Bebidas': '#16a085',        // verde azulado
+    'Refrescos': '#2980b9',      // azul
+    'Cervezas': '#b8860b'        // dorado/ámbar
+  };
+  function colorDelProducto(p) {
+    for (const regla of COLOR_POR_PATRON) {
+      if (regla.patron.test(p.nombre)) return regla.color;
+    }
+    const nombreCategoria = p.categoria && p.categoria.nombre;
+    return COLOR_POR_CATEGORIA[nombreCategoria] || '#95a5a6';
+  }
+
+  // Modificadores rápidos para agilizar la toma de pedido (en vez de escribir
+  // a mano). Se eligen tocando los botones y se arman como texto en la nota.
+  function modificadoresPara(p) {
+    const nombreCategoria = p.categoria && p.categoria.nombre;
+    const base = ['Sin cebolla', 'Sin limón', 'Sin cilantro', 'Sin catsup', 'Sin chile', 'Extra salsa', 'Para llevar'];
+    if (nombreCategoria === 'Carnes' || /filete|milanesa|pechuga/i.test(p.nombre)) {
+      return ['Sin cebolla', 'Sin catsup', 'Bien cocido', 'Término medio', 'Extra salsa', 'Para llevar'];
+    }
+    if (['Bebidas', 'Refrescos', 'Cervezas'].includes(nombreCategoria)) {
+      return ['Sin hielo', 'Extra hielo', 'Para llevar'];
+    }
+    if (nombreCategoria === 'Postres') {
+      return ['Sin crema', 'Para llevar'];
+    }
+    return base;
+  }
+
   function pintarMenu() {
     const cont = document.getElementById('grid-menu');
     const lista = productos.filter(p => {
@@ -178,7 +228,7 @@
         ? `Desde $${Math.min(...p.variantes.map(v => v.precio)).toFixed(2)}`
         : `$${p.precio.toFixed(2)}`;
       return `
-      <div class="producto-card ${p.disponible ? '' : 'agotado'}">
+      <div class="producto-card ${p.disponible ? '' : 'agotado'}" style="border-left: 5px solid ${colorDelProducto(p)};">
         ${p.foto ? `<img class="foto-producto" src="${p.foto}" alt="">` : ''}
         <span class="nombre">${p.esPaquete ? '📦 ' : ''}${p.nombre}</span>
         <span class="precio">${precioMostrado}</span>
@@ -191,12 +241,19 @@
   }
 
   let varianteElegida = '';
+  let modsElegidos = [];
 
   function abrirModalNotas(producto) {
     productoParaAgregar = producto._id;
     varianteElegida = '';
+    modsElegidos = [];
     document.getElementById('modal-producto-nombre').textContent = producto.nombre;
     document.getElementById('modal-nota-texto').value = '';
+
+    const contMods = document.getElementById('modificadores-opciones');
+    contMods.innerHTML = modificadoresPara(producto).map(m => `
+      <button type="button" class="btn-variante" data-mod="${m.replace(/'/g, "&apos;")}" onclick="toggleModificador(this, '${m.replace(/'/g, "\\'")}')">${m}</button>
+    `).join('');
 
     const bloque = document.getElementById('bloque-variantes');
     const opciones = document.getElementById('variantes-opciones');
@@ -216,6 +273,15 @@
     document.getElementById('modal-notas').classList.add('mostrar');
   }
 
+  function toggleModificador(btn, nombre) {
+    btn.classList.toggle('activa');
+    if (modsElegidos.includes(nombre)) {
+      modsElegidos = modsElegidos.filter(m => m !== nombre);
+    } else {
+      modsElegidos.push(nombre);
+    }
+  }
+
   function elegirVariante(btn, nombre) {
     varianteElegida = nombre;
     document.querySelectorAll('#variantes-opciones .btn-variante').forEach(b => b.classList.remove('activa'));
@@ -229,7 +295,8 @@
 
   async function confirmarAgregar() {
     if (!productoParaAgregar || !pedidoActual) return;
-    const notas = document.getElementById('modal-nota-texto').value.trim();
+    const notaLibre = document.getElementById('modal-nota-texto').value.trim();
+    const notas = [modsElegidos.join(', '), notaLibre].filter(Boolean).join(' — ');
 
     try {
       await Api.post(`/pedidos/${pedidoActual._id}/items`, {

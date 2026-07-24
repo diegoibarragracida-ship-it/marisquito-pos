@@ -5,6 +5,7 @@ const Producto = require('../models/Producto');
 const Mesa = require('../models/Mesa');
 const CorteCaja = require('../models/CorteCaja');
 const Promocion = require('../models/Promocion');
+const Gasto = require('../models/Gasto');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
 
 // Abrir turno de caja
@@ -89,6 +90,7 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
 
     pedido.total = total;
     pedido.estadoCuenta = 'cerrada';
+    pedido.metodoPago = metodoPago || 'efectivo';
     await pedido.save();
 
     // Liberar la mesa (si el pedido es "para llevar" no hay mesa que liberar)
@@ -124,6 +126,8 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
     if (restante <= 0) {
       pedido.total = totalPagado;
       pedido.estadoCuenta = 'cerrada';
+      const metodosUsados = [...new Set(pedido.pagos.map(p => p.metodoPago))];
+      pedido.metodoPago = metodosUsados.length > 1 ? 'mixto' : (metodosUsados[0] || 'efectivo');
       cuentaCerrada = true;
       if (pedido.mesa) {
         await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null });
@@ -132,6 +136,38 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
 
     await pedido.save();
     res.json({ pedido, subtotal, totalPagado, restante, cuentaCerrada });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Corte del día: ventas (por método de pago) + gastos de hoy, para el botón de "Corte diario"
+router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  try {
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+
+    const pedidosHoy = await Pedido.find({
+      estadoCuenta: 'cerrada',
+      updatedAt: { $gte: inicioDia }
+    });
+
+    const ventas = { efectivo: 0, tarjeta: 0, mixto: 0, total: 0, numCuentas: pedidosHoy.length };
+    for (const p of pedidosHoy) {
+      const metodo = p.metodoPago || 'efectivo';
+      if (ventas[metodo] !== undefined) ventas[metodo] += p.total;
+      ventas.total += p.total;
+    }
+
+    const gastosHoy = await Gasto.find({ fecha: { $gte: inicioDia } });
+    const totalGastos = gastosHoy.reduce((acc, g) => acc + g.monto, 0);
+
+    res.json({
+      fecha: inicioDia,
+      ventas,
+      gastos: { total: totalGastos, detalle: gastosHoy },
+      utilidadBruta: ventas.total - totalGastos
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

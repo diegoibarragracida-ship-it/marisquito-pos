@@ -22,6 +22,10 @@
     <div class="cargando">Revisando turno…</div>
   </div>
 
+  <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
+    <button class="btn-volver" style="width:auto; padding:10px 20px; font-weight:600;" onclick="abrirCorteDia()">📊 Corte del día</button>
+  </div>
+
   <div class="encabezado-seccion">
     <div>
       <div class="eyebrow">Salón</div>
@@ -59,6 +63,17 @@
     <div class="modal-botones">
       <button class="btn-volver" onclick="cerrarModal('modal-cerrar-turno')">Cancelar</button>
       <button class="btn-principal" onclick="cerrarTurno()">Cerrar turno</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: corte del día -->
+<div class="modal-fondo" id="modal-corte-dia">
+  <div class="modal-caja ancho">
+    <h3>📊 Corte del día</h3>
+    <div id="corte-dia-cuerpo"><div class="cargando">Calculando…</div></div>
+    <div class="modal-botones">
+      <button class="btn-volver" onclick="cerrarModal('modal-corte-dia')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -395,6 +410,35 @@
         calcularDivision();
       }
     } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function abrirCorteDia() {
+    document.getElementById('modal-corte-dia').classList.add('mostrar');
+    const cont = document.getElementById('corte-dia-cuerpo');
+    cont.innerHTML = '<div class="cargando">Calculando…</div>';
+    try {
+      const c = await Api.get('/caja/corte-dia');
+      const efectivoInicial = turnoActual ? Number(turnoActual.efectivoInicial) : 0;
+      const efectivoEsperado = efectivoInicial + c.ventas.efectivo;
+      cont.innerHTML = `
+        <div class="resumen-linea"><span>Cuentas cobradas hoy</span><span>${c.ventas.numCuentas}</span></div>
+        <div class="resumen-linea"><span>Ventas en efectivo</span><span>$${c.ventas.efectivo.toFixed(2)}</span></div>
+        <div class="resumen-linea"><span>Ventas con tarjeta</span><span>$${c.ventas.tarjeta.toFixed(2)}</span></div>
+        <div class="resumen-linea"><span>Ventas mixtas</span><span>$${c.ventas.mixto.toFixed(2)}</span></div>
+        <div class="resumen-linea total-final"><span>Total vendido hoy</span><span>$${c.ventas.total.toFixed(2)}</span></div>
+        <div class="linea-punteada" style="margin:10px 0;"></div>
+        <div class="resumen-linea"><span>Gastos registrados hoy</span><span>-$${c.gastos.total.toFixed(2)}</span></div>
+        <div class="resumen-linea total-final"><span>Utilidad bruta de hoy</span><span>$${c.utilidadBruta.toFixed(2)}</span></div>
+        ${turnoActual ? `
+          <div class="linea-punteada" style="margin:10px 0;"></div>
+          <div class="resumen-linea"><span>Efectivo inicial del turno</span><span>$${efectivoInicial.toFixed(2)}</span></div>
+          <div class="resumen-linea total-final"><span>Efectivo esperado en caja</span><span>$${efectivoEsperado.toFixed(2)}</span></div>
+        ` : '<div class="ticket-vacio" style="margin-top:10px;">No tienes un turno abierto, así que no se puede calcular el efectivo esperado en caja.</div>'}
+      `;
+    } catch (err) {
+      cont.innerHTML = '';
       mostrarToast(err.message, true);
     }
   }
