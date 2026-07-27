@@ -183,28 +183,11 @@
   // "Filete Sol" salga del color de filetes aunque esté en Especialidades,
   // o "Chilpachole de jaiba" salga del color de caldos), y si no coincide
   // ningún patrón, se usa el color de su CATEGORÍA.
-  const COLOR_POR_PATRON = [
-    { patron: /tostada/i, color: '#8a5a35' },                         // café
-    { patron: /caldo|cazuela|chilpachole|sopa/i, color: '#c0392b' },  // rojo
-    { patron: /filete/i, color: '#2471a3' }                           // azul
-  ];
-  const COLOR_POR_CATEGORIA = {
-    'Cocteles': '#2e8b57',       // verde
-    'Entradas': '#d68910',       // naranja
-    'Especialidades': '#7d3c98', // morado
-    'Carnes': '#922b21',         // vino/marrón rojizo
-    'Extras': '#7f8c8d',         // gris
-    'Postres': '#c2185b',        // rosa
-    'Bebidas': '#16a085',        // verde azulado
-    'Refrescos': '#2980b9',      // azul
-    'Cervezas': '#b8860b'        // dorado/ámbar
-  };
-  function colorDelProducto(p) {
-    for (const regla of COLOR_POR_PATRON) {
-      if (regla.patron.test(p.nombre)) return regla.color;
-    }
-    const nombreCategoria = p.categoria && p.categoria.nombre;
-    return COLOR_POR_CATEGORIA[nombreCategoria] || '#95a5a6';
+  // El color del borde de cada producto ahora usa la MISMA estación (cocina/barra)
+  // que configuras en Admin → Menú (antes había un sistema aparte que adivinaba el
+  // color por el nombre del platillo, y si no coincidía exactamente se veía gris).
+  function estacionDelProducto(p) {
+    return p.estacion || (p.categoria && p.categoria.estacion) || 'cocina';
   }
 
   // Modificadores rápidos para agilizar la toma de pedido (en vez de escribir
@@ -262,10 +245,9 @@
       const precioMostrado = tieneVariantes
         ? `Desde $${Math.min(...p.variantes.map(v => v.precio)).toFixed(2)}`
         : `$${p.precio.toFixed(2)}`;
-      const color = colorDelProducto(p);
+      const estacion = estacionDelProducto(p);
       return `
-      <div class="producto-card ${p.disponible ? '' : 'agotado'}" style="border: 3px solid ${color}; box-shadow: 0 0 0 1px ${color}55, var(--sombra); padding-top:0; overflow:hidden;">
-        <div style="background:${color}; height:8px; margin:-14px -14px 6px -14px;"></div>
+      <div class="producto-card ${estacion === 'barra' ? 'estacion-barra' : ''} ${p.disponible ? '' : 'agotado'}">
         ${p.foto ? `<img class="foto-producto" src="${p.foto}" alt="">` : ''}
         <span class="nombre">${p.esPaquete ? '📦 ' : ''}${p.nombre}</span>
         <span class="precio">${precioMostrado}</span>
