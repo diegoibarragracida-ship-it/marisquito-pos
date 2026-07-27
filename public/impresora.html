@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Estación de impresión — El Marisquito</title>
 <link rel="stylesheet" href="/css/style.css">
+<script src="https://unpkg.com/lucide@latest"></script>
 <style>
   .estacion-wrap {
     min-height: 100vh;
@@ -60,6 +61,12 @@
     Deja esta pantalla abierta en el dispositivo conectado a esa impresora.
     En cuanto llegue una comanda o un ticket para esta estación, se imprimirá aquí automáticamente.
   </p>
+
+  <label id="opcion-rawbt" style="display:none; align-items:center; gap:8px; background:#fff; padding:10px 16px; border-radius:10px; box-shadow:var(--sombra); margin-top:10px; cursor:pointer; font-size:0.85rem;">
+    <input type="checkbox" id="chk-rawbt" style="width:auto;" onchange="guardarPreferenciaRawBT()">
+    Usar <strong>RawBT</strong> para imprimir (celular/tablet Android con impresora Bluetooth)
+  </label>
+
   <div class="log-impresiones" id="log-impresiones"></div>
 </div>
 
@@ -70,13 +77,22 @@
 <script src="/js/config.js"></script>
 <script src="/js/api.js"></script>
 <script>
-  const usuario = exigirSesion(['admin', 'cajero', 'cocina']);
-  let procesando = false;
-
   // La estación se elige por la URL: /impresora.html?estacion=cocina o /impresora.html?estacion=barra
   // Sin el parámetro, esta pantalla imprime TODO (modo de una sola impresora).
   const parametros = new URLSearchParams(location.search);
   const estacion = parametros.get('estacion') || '';
+
+  // Quién puede entrar a cada estación: Barra es del admin, Cocina es del panel de cocina.
+  // Sin estación (modo de una sola impresora) se deja abierto a los tres, como antes.
+  let rolesPermitidos = ['admin', 'cajero', 'cocina'];
+  if (estacion === 'barra') rolesPermitidos = ['admin'];
+  else if (estacion === 'cocina') rolesPermitidos = ['cocina'];
+
+  const usuario = exigirSesion(rolesPermitidos);
+  let procesando = false;
+
+  const esAndroid = /Android/i.test(navigator.userAgent);
+  const claveRawBT = 'usarRawBT_' + (estacion || 'general'); // preferencia guardada POR ESTE DISPOSITIVO/ESTACIÓN
 
   if (usuario) {
     pintarBarraSuperior(usuario);
@@ -87,9 +103,28 @@
       document.getElementById('etiqueta-estacion').textContent = '🍽 Estación: Cocina';
       document.getElementById('titulo-espera').textContent = 'Esperando comandas de cocina…';
     }
+
+    // La opción de RawBT solo tiene sentido en Android (en Windows/Mac se usa window.print() normal)
+    if (esAndroid) {
+      const opcion = document.getElementById('opcion-rawbt');
+      opcion.style.display = 'flex';
+      const chk = document.getElementById('chk-rawbt');
+      chk.checked = localStorage.getItem(claveRawBT) === '1';
+    }
+
     revisarPendientes();
     conectarTiempoReal();
     setInterval(revisarPendientes, 5000); // respaldo por si el socket se cae
+  }
+
+  function guardarPreferenciaRawBT() {
+    const chk = document.getElementById('chk-rawbt');
+    localStorage.setItem(claveRawBT, chk.checked ? '1' : '0');
+    mostrarToast(chk.checked ? 'Ahora se imprime directo con RawBT' : 'Ahora se usa el diálogo normal de impresión');
+  }
+
+  function usaRawBT() {
+    return esAndroid && localStorage.getItem(claveRawBT) === '1';
   }
 
   function conectarTiempoReal() {
@@ -121,12 +156,19 @@
 
   function imprimirTrabajo(trabajo) {
     return new Promise((resolve) => {
-      const zona = document.getElementById('zona-imprimible-auto');
-      zona.innerHTML = trabajo.html;
+      if (usaRawBT()) {
+        // Impresión directa: sin diálogo, sin tocar nada — el ticket llega solo a la impresora Bluetooth
+        const texto = htmlAtextoPlano(trabajo.html);
+        imprimirConRawBT(texto);
+      } else {
+        // Modo normal del navegador (Windows/Mac, o Android sin RawBT activado)
+        const zona = document.getElementById('zona-imprimible-auto');
+        zona.innerHTML = trabajo.html;
+        window.print();
+      }
 
-      window.print();
-
-      // Después de imprimir (o cancelar), marcamos como impreso y seguimos con el siguiente
+      // Después de mandar a imprimir, marcamos como impreso y seguimos con el siguiente.
+      // (RawBT no avisa cuando terminó, así que igual que con window.print() usamos un margen de tiempo)
       setTimeout(async () => {
         try {
           await Api.patch(`/impresion/${trabajo._id}/impreso`, {});
@@ -137,6 +179,33 @@
         resolve();
       }, 800);
     });
+  }
+
+  // Convierte el ticket (que se guardó como HTML para window.print()) a texto plano
+  // para mandarlo por RawBT, que solo entiende texto simple.
+  function htmlAtextoPlano(html) {
+    // las líneas separadoras son divs vacíos que solo llevan borde por CSS;
+    // hay que volverlas una línea de guiones de verdad antes de quitar las etiquetas
+    const conLineas = html.replace(/<div class="linea-punteada"[^>]*>\s*<\/div>/g, '--------------------------------');
+
+    const contenedor = document.createElement('div');
+    contenedor.innerHTML = conLineas;
+
+    // Tomamos solo los hijos "de primer nivel" (h2, divs, etc. que están directo
+    // dentro del ticket) — cada uno es un renglón del ticket.
+    const lineas = [];
+    contenedor.childNodes.forEach(nodo => {
+      const texto = (nodo.textContent || '').replace(/\s+/g, ' ').trim();
+      if (texto) lineas.push(texto);
+    });
+
+    return lineas.join('\n') + '\n\n\n'; // espacio extra al final para que el corte no tape el último renglón
+  }
+
+  function imprimirConRawBT(texto) {
+    const sufijo = '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+    const textoCodificado = encodeURI(texto);
+    window.location.href = 'intent:' + textoCodificado + sufijo;
   }
 
   function agregarAlLog(trabajo) {

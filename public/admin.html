@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — El Marisquito</title>
 <link rel="stylesheet" href="/css/style.css">
+<script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 
@@ -14,9 +15,9 @@
     <span class="sub">Administración</span>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
-    <a href="/mesero.html" target="_blank" class="btn-volver" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;">🧾 Levantar pedido</a>
-    <a href="/caja.html" target="_blank" class="btn-volver" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;">💵 Cobrar (Caja)</a>
-    <a href="/cocina.html" target="_blank" class="btn-volver" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;">🍽 Ver cocina</a>
+    <a href="/mesero.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="clipboard-list"></i> Levantar pedido</a>
+    <a href="/caja.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="circle-dollar-sign"></i> Cobrar (Caja)</a>
+    <a href="/cocina.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="chef-hat"></i> Ver cocina</a>
     <div class="usuario" id="barra-usuario"></div>
   </div>
 </div>
@@ -313,6 +314,7 @@
         <span><span class="punto libre"></span>Libre</span>
         <span><span class="punto ocupada"></span>Ocupada</span>
         <span><span class="punto cuenta_pedida"></span>Cuenta pedida</span>
+        <span><span class="punto reservada"></span>Reservada</span>
       </div>
       <div class="plano-salon plano-editor" id="plano-editor">
         <div class="cargando">Cargando plano…</div>
@@ -646,6 +648,7 @@
 <script src="/js/api.js"></script>
 <script>
   const usuario = exigirSesion(['admin']);
+  if (window.lucide) lucide.createIcons();
   let insumosCache = [];
   let categoriasCache = [];
   let productosCache = [];

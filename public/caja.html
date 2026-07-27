@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Caja — El Marisquito</title>
 <link rel="stylesheet" href="/css/style.css">
+<script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 
@@ -307,7 +308,7 @@
     `;
 
     try {
-      await Api.post('/impresion', { tipo: 'ticket', html });
+      await Api.post('/impresion', { tipo: 'ticket', html, estacion: 'barra' });
       mostrarToast('Ticket enviado a la impresora');
     } catch (err) {
       mostrarToast(err.message, true);

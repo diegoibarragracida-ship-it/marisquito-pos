@@ -81,7 +81,7 @@ function pintarBarraSuperior(usuario) {
   // le dejamos un botón fácil para regresar a su panel.
   const esAdminFueraDeSuPanel = usuario.rol === 'admin' && !window.location.pathname.startsWith('/admin.html');
   const botonVolver = esAdminFueraDeSuPanel
-    ? `<a href="/admin.html" class="btn-volver" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;">⬅ Panel Admin</a>`
+    ? `<a href="/admin.html" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="arrow-left"></i> Panel Admin</a>`
     : '';
 
   el.innerHTML = `
@@ -90,4 +90,5 @@ function pintarBarraSuperior(usuario) {
     <span class="rol-badge">${usuario.rol}</span>
     <button class="btn-salir" onclick="Api.cerrarSesion()">Salir</button>
   `;
+  if (window.lucide) lucide.createIcons();
 }

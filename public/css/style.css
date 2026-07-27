@@ -121,6 +121,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .btn-salir:hover { background: rgba(255,255,255,0.1); }
 
+/* ---------- Botones con ícono (Lucide) ---------- */
+.btn-con-icono { display: inline-flex; align-items: center; gap: 6px; }
+.btn-con-icono [data-lucide] { width: 15px; height: 15px; stroke-width: 2.2; flex-shrink: 0; }
+#btn-enviar-orden [data-lucide] { width: 18px; height: 18px; vertical-align: -3px; stroke-width: 2.4; }
+
 /* ---------- Layout general ---------- */
 .contenedor {
   max-width: 1200px;
@@ -337,12 +342,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border-radius: var(--radio);
   padding: 14px;
   box-shadow: var(--sombra);
-  border-left: 5px solid #e2572b; /* cocina — coral/fuego, por default */
+  border-left: 5px solid #95a5a6; /* se sobreescribe por categoría en pedido.html */
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.producto-card.estacion-barra { border-left-color: #00b8d4; box-shadow: 0 4px 14px rgba(0, 184, 212, 0.18); } /* barra — turquesa/agua */
 .producto-card .nombre { font-weight: 600; font-size: 0.95rem; line-height: 1.25; }
 .producto-card .precio {
   font-family: var(--fuente-display);
@@ -990,11 +994,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 
 .producto-card .foto-producto {
-  width: 100%;
-  height: 100px;
+  width: calc(100% + 28px);
+  height: 140px;
   object-fit: cover;
-  border-radius: 6px;
-  margin-bottom: 2px;
+  margin: -14px -14px 8px -14px;
+  border-radius: 8px 8px 0 0;
+  display: block;
   background: var(--arena-2);
 }
 

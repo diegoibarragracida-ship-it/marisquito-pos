@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mesas — El Marisquito</title>
 <link rel="stylesheet" href="/css/style.css">
+<script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 
@@ -23,7 +24,7 @@
       <h2 class="display">Mapa de mesas</h2>
     </div>
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-      <button class="btn-crear" style="width:auto; padding:9px 18px;" onclick="abrirModalLlevar()">🥡 Nuevo para llevar</button>
+      <button class="btn-crear btn-con-icono" style="width:auto; padding:9px 18px;" onclick="abrirModalLlevar()"><i data-lucide="shopping-bag"></i> Nuevo para llevar</button>
       <div class="categoria-tabs" style="margin-bottom:0; overflow-x:visible;">
         <button class="categoria-tab activa" id="tab-vista-plano" onclick="cambiarVista('plano')">Plano</button>
         <button class="categoria-tab" id="tab-vista-lista" onclick="cambiarVista('lista')">Lista</button>
@@ -35,6 +36,7 @@
     <span><span class="punto libre"></span>Libre</span>
     <span><span class="punto ocupada"></span>Ocupada</span>
     <span><span class="punto cuenta_pedida"></span>Cuenta pedida</span>
+    <span><span class="punto reservada"></span>Reservada</span>
   </div>
 
   <div class="plano-salon" id="plano-mesero" style="display:none;">
