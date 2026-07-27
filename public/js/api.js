@@ -76,7 +76,16 @@ function mostrarToast(mensaje, esError) {
 function pintarBarraSuperior(usuario) {
   const el = document.getElementById('barra-usuario');
   if (!el) return;
+
+  // Si quien entró es admin y está en una pantalla que no es la suya (mesero/caja/cocina/impresión),
+  // le dejamos un botón fácil para regresar a su panel.
+  const esAdminFueraDeSuPanel = usuario.rol === 'admin' && !window.location.pathname.startsWith('/admin.html');
+  const botonVolver = esAdminFueraDeSuPanel
+    ? `<a href="/admin.html" class="btn-volver" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;">⬅ Panel Admin</a>`
+    : '';
+
   el.innerHTML = `
+    ${botonVolver}
     <span>${usuario.nombre}</span>
     <span class="rol-badge">${usuario.rol}</span>
     <button class="btn-salir" onclick="Api.cerrarSesion()">Salir</button>

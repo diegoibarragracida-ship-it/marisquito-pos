@@ -98,7 +98,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .topbar .usuario {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
   font-size: 0.9rem;
 }
 .topbar .rol-badge {
@@ -298,6 +299,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 @media (max-width: 860px) {
   .vista-pedido { grid-template-columns: 1fr; }
+  .ticket { position: static; top: auto; } /* en una sola columna, el "pegado" del escritorio se ve encimado y roto */
 }
 
 .categoria-tabs {
@@ -918,7 +920,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .contenedor { padding: 18px 14px 50px; }
   .topbar { padding: 10px 14px; }
   .topbar .marca .display { font-size: 1.1rem; }
+  .encabezado-seccion { flex-direction: column; align-items: stretch; }
   .encabezado-seccion .display { font-size: 1.25rem; }
+  .encabezado-seccion > div[style*="display:flex"] { width: 100%; justify-content: space-between; }
+  .encabezado-seccion .btn-crear { flex: 1; }
   .grid-menu { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .grid-mesas { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
   .mesa-plano { width: 50px; height: 50px; font-size: 0.9rem; }

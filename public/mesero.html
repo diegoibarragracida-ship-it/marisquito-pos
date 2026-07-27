@@ -22,9 +22,9 @@
       <div class="eyebrow">Salón</div>
       <h2 class="display">Mapa de mesas</h2>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
       <button class="btn-crear" style="width:auto; padding:9px 18px;" onclick="abrirModalLlevar()">🥡 Nuevo para llevar</button>
-      <div class="categoria-tabs" style="margin-bottom:0;">
+      <div class="categoria-tabs" style="margin-bottom:0; overflow-x:visible;">
         <button class="categoria-tab activa" id="tab-vista-plano" onclick="cambiarVista('plano')">Plano</button>
         <button class="categoria-tab" id="tab-vista-lista" onclick="cambiarVista('lista')">Lista</button>
       </div>
@@ -72,11 +72,13 @@
 <script src="/js/alertas.js"></script>
 <script>
   const usuario = exigirSesion(['mesero', 'admin']);
-  let vistaActual = 'plano';
+  // En celular el "Plano" (mapa visual) se amontona porque las mesas usan posiciones
+  // fijas pensadas para pantalla grande — en pantallas angostas abrimos en "Lista" por default.
+  let vistaActual = window.innerWidth < 700 ? 'lista' : 'plano';
 
   if (usuario) {
     pintarBarraSuperior(usuario);
-    cambiarVista('plano');
+    cambiarVista(vistaActual);
     cargarLlevar();
     conectarTiempoReal();
   }
