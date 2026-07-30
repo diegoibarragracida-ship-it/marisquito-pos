@@ -45,7 +45,6 @@ const INSUMOS_NUEVOS = [
   { nombre: 'Tostada',              unidad: 'pieza',  stockActual: 300,   stockMinimo: 50,   costoUnitario: 1.5 },
   { nombre: 'Tortilla de maíz',     unidad: 'pieza',  stockActual: 500,   stockMinimo: 100,  costoUnitario: 0.8 },
   { nombre: 'Totopos',              unidad: 'g',     stockActual: 5000,  stockMinimo: 500,  costoUnitario: 0.03 },
-  { nombre: 'Pan para torta',       unidad: 'pieza',  stockActual: 100,   stockMinimo: 10,   costoUnitario: 6 },
   { nombre: 'Pan molido',           unidad: 'g',     stockActual: 3000,  stockMinimo: 500,  costoUnitario: 0.03 },
   { nombre: 'Huevo',                unidad: 'pieza',  stockActual: 200,   stockMinimo: 24,   costoUnitario: 3 },
 
@@ -156,41 +155,60 @@ const RECETAS = {
   // --- Especialidades ---
   'Camarones al gusto': [
     { insumoNombre: 'Camarón', cantidad: 250 },
-    { insumoNombre: 'Aceite', cantidad: 15 }
+    { insumoNombre: 'Aceite', cantidad: 15 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 },
+    { insumoNombre: 'Jitomate', cantidad: 30 }
   ],
   'Pulpos al gusto': [
     { insumoNombre: 'Pulpo', cantidad: 280 },
-    { insumoNombre: 'Aceite', cantidad: 15 }
+    { insumoNombre: 'Aceite', cantidad: 15 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 },
+    { insumoNombre: 'Jitomate', cantidad: 30 }
   ],
   'Posta Robelo al gusto': [
     { insumoNombre: 'Posta de robalo', cantidad: 250 },
-    { insumoNombre: 'Aceite', cantidad: 15 }
+    { insumoNombre: 'Aceite', cantidad: 15 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 },
+    { insumoNombre: 'Jitomate', cantidad: 30 }
   ],
   'Torta de Camarón': [
-    { insumoNombre: 'Pan para torta', cantidad: 1 },
-    { insumoNombre: 'Camarón', cantidad: 120 },
-    { insumoNombre: 'Aguacate', cantidad: 0.5 },
-    { insumoNombre: 'Frijol', cantidad: 40 }
+    // Torta veracruzana: camarón picado batido con huevo y frito en tortitas — NO es pan.
+    { insumoNombre: 'Camarón', cantidad: 130 },
+    { insumoNombre: 'Huevo', cantidad: 3 },
+    { insumoNombre: 'Aceite', cantidad: 20 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 20 }
   ],
   'Torta de Mariscos': [
-    { insumoNombre: 'Pan para torta', cantidad: 1 },
     { insumoNombre: 'Camarón', cantidad: 60 },
     { insumoNombre: 'Pulpo', cantidad: 60 },
-    { insumoNombre: 'Frijol', cantidad: 40 }
+    { insumoNombre: 'Huevo', cantidad: 3 },
+    { insumoNombre: 'Aceite', cantidad: 20 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 20 }
   ],
   'Filete Sol': [
     { insumoNombre: 'Filete de pescado', cantidad: 220 },
-    { insumoNombre: 'Camarón', cantidad: 40 }
+    { insumoNombre: 'Camarón', cantidad: 40 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
   'Filete a la Plancha': [
     { insumoNombre: 'Filete de pescado', cantidad: 220 },
-    { insumoNombre: 'Aceite', cantidad: 10 }
+    { insumoNombre: 'Aceite', cantidad: 10 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
   'Filete Empanizado': [
     { insumoNombre: 'Filete de pescado', cantidad: 200 },
     { insumoNombre: 'Pan molido', cantidad: 50 },
     { insumoNombre: 'Huevo', cantidad: 1 },
-    { insumoNombre: 'Aceite', cantidad: 30 }
+    { insumoNombre: 'Aceite', cantidad: 30 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
   'Ensalada de mariscos': [
     { insumoNombre: 'Camarón', cantidad: 60 },
@@ -254,30 +272,40 @@ const RECETAS = {
 
   // --- Carnes ---
   'Filete asado de res': [
-    { insumoNombre: 'Filete de res', cantidad: 220 }
+    { insumoNombre: 'Filete de res', cantidad: 220 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
   'Arrachera con papas': [
     { insumoNombre: 'Arrachera', cantidad: 220 },
-    { insumoNombre: 'Papa', cantidad: 150 }
+    { insumoNombre: 'Papa', cantidad: 150 },
+    { insumoNombre: 'Lechuga', cantidad: 20 }
   ],
   'Tampiqueña': [
     { insumoNombre: 'Arrachera', cantidad: 150 },
     { insumoNombre: 'Queso', cantidad: 30 },
-    { insumoNombre: 'Frijol', cantidad: 60 }
+    { insumoNombre: 'Frijol', cantidad: 60 },
+    { insumoNombre: 'Arroz', cantidad: 80 }
   ],
   'Milanesa de res': [
     { insumoNombre: 'Milanesa de res', cantidad: 200 },
     { insumoNombre: 'Pan molido', cantidad: 40 },
-    { insumoNombre: 'Huevo', cantidad: 1 }
+    { insumoNombre: 'Huevo', cantidad: 1 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
   'Milanesa de pollo': [
     { insumoNombre: 'Milanesa de pollo', cantidad: 200 },
     { insumoNombre: 'Pan molido', cantidad: 40 },
-    { insumoNombre: 'Huevo', cantidad: 1 }
+    { insumoNombre: 'Huevo', cantidad: 1 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
   'Pechuga a la plancha': [
     { insumoNombre: 'Pechuga de pollo', cantidad: 200 },
-    { insumoNombre: 'Aceite', cantidad: 10 }
+    { insumoNombre: 'Aceite', cantidad: 10 },
+    { insumoNombre: 'Arroz', cantidad: 100 },
+    { insumoNombre: 'Lechuga', cantidad: 30 }
   ],
 
   // --- Extras ---
@@ -377,6 +405,20 @@ const RECETAS = {
 };
 
 /* ======================================================================
+   3) Estos productos se corrigieron (la torta es de huevo, no de pan; y se
+   agregó guarnición de arroz/ensalada a varios platos fuertes). Si ya habías
+   corrido una versión anterior de este script, estos nombres se
+   RE-ESCRIBEN aunque ya tengan receta cargada — todo lo demás se respeta.
+   ====================================================================== */
+const FORZAR_ACTUALIZACION = [
+  'Torta de Camarón', 'Torta de Mariscos',
+  'Camarones al gusto', 'Pulpos al gusto', 'Posta Robelo al gusto',
+  'Filete Sol', 'Filete a la Plancha', 'Filete Empanizado',
+  'Filete asado de res', 'Arrachera con papas', 'Tampiqueña',
+  'Milanesa de res', 'Milanesa de pollo', 'Pechuga a la plancha'
+];
+
+/* ======================================================================
    Lógica del importador
    ====================================================================== */
 
@@ -419,7 +461,7 @@ async function correr() {
       noEncontradas++;
       continue;
     }
-    if (producto.receta && producto.receta.length > 0) {
+    if (producto.receta && producto.receta.length > 0 && !FORZAR_ACTUALIZACION.includes(nombreProducto)) {
       console.log(`  - "${nombreProducto}" ya tenía receta, se dejó igual.`);
       saltadas++;
       continue;

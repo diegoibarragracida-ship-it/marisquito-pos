@@ -111,7 +111,7 @@
     `;
 
     try {
-      await Api.post('/impresion', { tipo: 'comanda', html });
+      await Api.post('/impresion', { tipo: 'comanda', html, estacion: 'cocina' });
       mostrarToast('Comanda enviada a la impresora');
     } catch (err) {
       mostrarToast(err.message, true);

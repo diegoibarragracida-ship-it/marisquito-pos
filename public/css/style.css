@@ -438,10 +438,21 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .ticket-vacio {
   text-align: center;
-  padding: 30px 10px;
+  padding: 36px 16px 30px;
   color: var(--oceano-2);
-  opacity: 0.6;
+  opacity: 0.75;
   font-size: 0.9rem;
+}
+.ticket-vacio::before, .plano-vacio::before {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 10px;
+  background-color: var(--alga);
+  opacity: 0.55;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12c0-3 3-6 9-6 3 0 5.5 2 6.5 6-1 4-3.5 6-6.5 6-6 0-9-3-9-6Z'/%3E%3Cpath d='M6.5 12 2 8m4.5 4L2 16'/%3E%3Ccircle cx='16' cy='10.5' r='0.7' fill='black'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12c0-3 3-6 9-6 3 0 5.5 2 6.5 6-1 4-3.5 6-6.5 6-6 0-9-3-9-6Z'/%3E%3Cpath d='M6.5 12 2 8m4.5 4L2 16'/%3E%3Ccircle cx='16' cy='10.5' r='0.7' fill='black'/%3E%3C/svg%3E") center/contain no-repeat;
 }
 .ticket-footer {
   padding: 14px 0 18px;
