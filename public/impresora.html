@@ -206,14 +206,12 @@
     const sufijo = '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
     const textoCodificado = encodeURI(texto);
 
-    // Se dispara desde un iframe invisible (no con window.location.href) para que
-    // la pestaña de la estación de impresión NO navegue hacia RawBT — así sigue
-    // viva de fondo y no hay que volver a entrar cuando regresas de imprimir.
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = 'intent:' + textoCodificado + sufijo;
-    document.body.appendChild(iframe);
-    setTimeout(() => iframe.remove(), 1500);
+    // NOTA: se probó disparar esto desde un iframe invisible para no salir de esta
+    // pantalla, pero Chrome/Android bloquea por seguridad la navegación a esquemas
+    // como "intent:" cuando viene de un iframe — con eso no imprimía nada. Por eso
+    // se regresó a la navegación directa: sí saca momentáneamente a RawBT (es
+    // esperado, es una app aparte tomando la pantalla), pero es lo que sí imprime.
+    window.location.href = 'intent:' + textoCodificado + sufijo;
   }
 
   function agregarAlLog(trabajo) {
