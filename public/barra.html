@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barra — El Marisquito</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  .estacion-wrap {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 30px;
+  }
+  .estado-punto {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--alga);
+    display: inline-block;
+    margin-right: 8px;
+    animation: pulso 1.6s infinite;
+  }
+  @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .log-impresiones {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 460px;
+    text-align: left;
+  }
+  .log-fila {
+    background: var(--blanco);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    box-shadow: var(--sombra);
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="marca">
+    <span class="display">El Marisquito</span>
+    <span class="sub">🍹 Estación: Barra</span>
+  </div>
+  <div class="usuario" id="barra-usuario"></div>
+</div>
+
+<div class="estacion-wrap">
+  <h2 class="display" style="color:var(--oceano);">
+    <span class="estado-punto"></span>Esperando comandas de barra…
+  </h2>
+  <p style="opacity:0.65; max-width:420px;">
+    Deja esta pantalla abierta en el dispositivo conectado a la impresora de barra (o con la
+    impresora Bluetooth ya emparejada, usando RawBT). En cuanto un mesero mande una bebida o
+    cóctel, se imprime aquí solo — no hay que tocar nada.
+  </p>
+
+  <div class="log-impresiones" id="log-impresiones"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/impresion-auto.js"></script>
+<script>
+  const usuario = exigirSesion(['cocina', 'admin']);
+
+  if (usuario) {
+    pintarBarraSuperior(usuario);
+    iniciarImpresionAutomatica('barra'); // esta pantalla solo recoge comandas de barra, aparte de cocina
+  }
+</script>
+</body>
+</html>

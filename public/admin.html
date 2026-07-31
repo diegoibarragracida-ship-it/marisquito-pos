@@ -63,9 +63,12 @@
     <div class="subseccion-titulo">Impresión</div>
     <div class="tarjeta-form" style="max-width:480px;">
       <p style="font-size:0.85rem; opacity:0.7; margin-bottom:10px;">
-        Abre esta pantalla en la computadora conectada a la impresora y déjala abierta — ahí llegarán todas las comandas y tickets automáticamente.
+        Esta pantalla ya imprime sola: en cuanto un mesero o la caja mandan una cuenta o comanda de barra,
+        sale aquí automáticamente (indicador abajo a la derecha). No hace falta abrir nada más.
+        Solo asegúrate de dejar esta pestaña abierta en el dispositivo conectado a la impresora
+        (o con la impresora Bluetooth ya emparejada si usas RawBT en Android).
       </p>
-      <button class="btn-crear" onclick="window.open('/impresora.html', '_blank')">Abrir estación de impresión</button>
+      <button class="btn-crear" onclick="window.open('/impresora.html', '_blank')">Ver centro de impresión (historial / reimprimir)</button>
     </div>
   </div>
 
@@ -646,6 +649,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/config.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/impresion-auto.js"></script>
 <script>
   const usuario = exigirSesion(['admin']);
   if (window.lucide) lucide.createIcons();
@@ -662,6 +666,7 @@
     cargarProductos();
     inicializarFormProductos();
     conectarTiempoRealVivo();
+    iniciarImpresionAutomatica(['admin', 'barra']); // cuentas (comparte 'admin' con Caja) + comandas de barra (comparte con Caja y con la estación Barra)
   }
 
   function conectarTiempoRealVivo() {

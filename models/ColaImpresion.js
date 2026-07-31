@@ -17,8 +17,12 @@ const colaImpresionSchema = new mongoose.Schema({
   },
   estacion: {
     type: String,
-    enum: ['cocina', 'barra']
-    // sin valor = se imprime en cualquier estación (compatibilidad con impresora única / tickets de caja)
+    enum: ['cocina', 'barra', 'admin']
+    // 'cocina'  -> SOLO la consola de Cocina (nunca cuentas, nunca barra)
+    // 'barra'   -> comandas de bebidas/cocteles: las recoge Admin, Caja o la estación Barra
+    //              (la que esté abierta primero; /consumir es atómico, nunca se duplica)
+    // 'admin'   -> cuentas/tickets: las recoge Admin o Caja (la que esté abierta primero)
+    // sin valor -> compatibilidad vieja, se imprime en cualquier estación
   }
 }, { timestamps: true });
 
