@@ -44,7 +44,7 @@
     procesando = true;
     try {
       // Se pide de UNO en uno con /consumir (atómico) hasta que ya no haya nada pendiente,
-      // recorriendo cada estación que esta consola escucha (ej. cocina y luego barra).
+      // recorriendo cada estación que esta consola escucha (ej. admin y luego barra).
       for (const estacion of estacionesActuales) {
         let trabajo = await Api.get(`/impresion/consumir?estacion=${estacion}`);
         while (trabajo) {
@@ -59,21 +59,50 @@
     }
   }
 
-  function imprimirTrabajo(trabajo) {
-    return new Promise((resolve) => {
+  async function imprimirTrabajo(trabajo) {
+    try {
       if (usaRawBT()) {
         const texto = htmlAtextoPlano(trabajo.html);
         imprimirConRawBT(texto);
+        // RawBT no avisa cuando terminó de imprimir. Lo único que sí podemos detectar es
+        // que Android nos manda de regreso a esta pestaña después de abrir RawBT (o de que
+        // el usuario cierre RawBT) — usamos eso como señal de "ya se disparó" antes de
+        // seguir con el siguiente ticket, en vez de solo un tiempo fijo a ciegas.
+        await esperarRegresoDeApp();
       } else {
         const zona = document.getElementById('zona-imprimible-auto');
         zona.innerHTML = trabajo.html;
         window.print();
+        await esperar(1200);
       }
       marcarEnIndicador(trabajo);
-      // Damos un margen antes de procesar el siguiente para no encimar dos
-      // impresiones/diálogos seguidos (el navegador puede ignorar un segundo
-      // window.print() si el anterior sigue abierto).
-      setTimeout(resolve, 1200);
+    } catch (err) {
+      // Si algo truena al imprimir (RawBT no instalado, error de DOM, etc.), el trabajo
+      // YA se había marcado como "impreso" al tomarlo con /consumir — lo regresamos a
+      // pendiente para que no se pierda en silencio y alguien lo note/reimprima.
+      console.error('No se pudo imprimir, se regresa a la cola:', err.message);
+      try { await Api.post(`/impresion/${trabajo._id}/reimprimir`, {}); } catch (e2) { /* si esto también falla, queda visible en el Centro de Impresión como "impreso" para revisarlo a mano */ }
+    }
+  }
+
+  function esperar(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Espera a que la pestaña vuelva a estar visible (el usuario regresó de RawBT), con un
+  // tope máximo por si el navegador no dispara el evento (para no trabarse ahí para siempre).
+  function esperarRegresoDeApp() {
+    return new Promise(resolve => {
+      let resuelto = false;
+      const terminar = () => {
+        if (resuelto) return;
+        resuelto = true;
+        document.removeEventListener('visibilitychange', onVisible);
+        resolve();
+      };
+      const onVisible = () => { if (document.visibilityState === 'visible') terminar(); };
+      document.addEventListener('visibilitychange', onVisible);
+      setTimeout(terminar, 4000); // tope de seguridad
     });
   }
 
