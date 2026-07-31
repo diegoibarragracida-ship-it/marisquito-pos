@@ -23,7 +23,6 @@
       <div class="eyebrow">En vivo</div>
       <h2 class="display">Comandas</h2>
     </div>
-    <button class="btn-crear" style="font-size:0.75rem; padding:8px 14px;" onclick="window.open('/barra.html', '_blank')">🍹 Abrir estación de Barra</button>
   </div>
 
   <div class="grid-comandas" id="grid-comandas">
@@ -71,7 +70,7 @@
           </div>
           ${c.notaGeneral ? `<div style="padding:8px 16px; background:#fdf6e8; font-size:0.78rem; font-style:italic;">📌 ${c.notaGeneral}</div>` : ''}
           ${c.items.map(item => `
-            <div class="comanda-item">
+            <div class="comanda-item ${claseAvisoTiempo(item.createdAt)}">
               <div class="nombre-item" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                 <span><span class="cant">${item.cantidad}×</span>${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}
                 ${tiempoEsperaHtml(item.createdAt)}</span>
@@ -95,6 +94,15 @@
     const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
     const tardado = minutos >= 10;
     return `<span class="tiempo-espera ${tardado ? 'tardado' : ''}">${minutos} min</span>`;
+  }
+
+  // Naranja parpadeante a partir de 15 min sin empezar/terminar, rojo parpadeante a partir de 30.
+  function claseAvisoTiempo(creadoEn) {
+    if (!creadoEn) return '';
+    const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
+    if (minutos >= 30) return 'aviso-30';
+    if (minutos >= 15) return 'aviso-15';
+    return '';
   }
 
   // Reimprime SOLO un platillo (no toda la comanda de la mesa). "datos" trae
