@@ -6,64 +6,28 @@
 <title>Barra — El Marisquito</title>
 <link rel="stylesheet" href="/css/style.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<style>
-  .estacion-wrap {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 30px;
-  }
-  .estado-punto {
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: var(--alga);
-    display: inline-block;
-    margin-right: 8px;
-    animation: pulso 1.6s infinite;
-  }
-  @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-  .log-impresiones {
-    margin-top: 30px;
-    width: 100%;
-    max-width: 460px;
-    text-align: left;
-  }
-  .log-fila {
-    background: var(--blanco);
-    border-radius: 8px;
-    padding: 10px 14px;
-    margin-bottom: 8px;
-    font-size: 0.85rem;
-    box-shadow: var(--sombra);
-    display: flex;
-    justify-content: space-between;
-  }
-</style>
 </head>
 <body>
 
 <div class="topbar">
   <div class="marca">
     <span class="display">El Marisquito</span>
-    <span class="sub">🍹 Estación: Barra</span>
+    <span class="sub">🍹 Barra</span>
   </div>
   <div class="usuario" id="barra-usuario"></div>
 </div>
 
-<div class="estacion-wrap">
-  <h2 class="display" style="color:var(--oceano);">
-    <span class="estado-punto"></span>Esperando comandas de barra…
-  </h2>
-  <p style="opacity:0.65; max-width:420px;">
-    Deja esta pantalla abierta en el dispositivo conectado a la impresora de barra (o con la
-    impresora Bluetooth ya emparejada, usando RawBT). En cuanto un mesero mande una bebida o
-    cóctel, se imprime aquí solo — no hay que tocar nada.
-  </p>
+<div class="contenedor">
+  <div class="encabezado-seccion">
+    <div>
+      <div class="eyebrow">En vivo</div>
+      <h2 class="display">Comandas de barra</h2>
+    </div>
+  </div>
 
-  <div class="log-impresiones" id="log-impresiones"></div>
+  <div class="grid-comandas" id="grid-comandas">
+    <div class="cargando">Cargando comandas…</div>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -75,8 +39,108 @@
 
   if (usuario) {
     pintarBarraSuperior(usuario);
-    iniciarImpresionAutomatica('barra'); // esta pantalla solo recoge comandas de barra, aparte de cocina
+    cargarComandas();
+    conectarTiempoReal();
+    iniciarImpresionAutomatica('barra'); // esta pantalla solo recoge comandas de barra
   }
+
+  function conectarTiempoReal() {
+    try {
+      const socket = io();
+      socket.on('nuevoItemPedido', () => cargarComandas());
+      socket.on('itemActualizado', () => cargarComandas());
+    } catch (err) {
+      console.warn('Socket.io no disponible, usando solo actualización periódica');
+    }
+  }
+
+  async function cargarComandas() {
+    const cont = document.getElementById('grid-comandas');
+    try {
+      const comandas = await Api.get('/barra/comandas');
+      if (comandas.length === 0) {
+        cont.innerHTML = '<div class="comanda-vacia">No hay bebidas ni cocteles pendientes ahora mismo 🍹</div>';
+        return;
+      }
+      cont.innerHTML = comandas.map(c => `
+        <div class="comanda-card">
+          <div class="comanda-header">
+            <span class="mesa-num">${c.paraLlevar ? `🥡 Para llevar${c.clienteLlevar ? ' — ' + c.clienteLlevar : ''}` : `Mesa ${c.mesa}`}</span>
+          </div>
+          ${c.notaGeneral ? `<div style="padding:8px 16px; background:#fdf6e8; font-size:0.78rem; font-style:italic;">📌 ${c.notaGeneral}</div>` : ''}
+          ${c.items.map(item => `
+            <div class="comanda-item ${claseAvisoTiempo(item.createdAt)}">
+              <div class="nombre-item" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span><span class="cant">${item.cantidad}×</span>${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}
+                ${tiempoEsperaHtml(item.createdAt)}</span>
+                <button class="btn-imprimir" style="padding:3px 8px; font-size:0.68rem; flex-shrink:0;" title="Reimprimir SOLO esta bebida (no toda la mesa)" onclick='reimprimirItem(${JSON.stringify({ mesa: c.mesa, paraLlevar: c.paraLlevar, clienteLlevar: c.clienteLlevar, item }).replace(/'/g, "&apos;")})'>🖨</button>
+              </div>
+              ${item.notas ? `<div class="nota-item">${item.notas}</div>` : ''}
+              ${item.estado === 'pendiente'
+                ? `<button class="btn-avanzar a-preparando" onclick="avanzarEstado('${c.pedidoId}', '${item._id}', 'preparando')">Empezar a preparar</button>`
+                : `<button class="btn-avanzar a-listo" onclick="avanzarEstado('${c.pedidoId}', '${item._id}', 'listo')">Marcar listo</button>`}
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function tiempoEsperaHtml(creadoEn) {
+    if (!creadoEn) return '';
+    const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
+    const tardado = minutos >= 10;
+    return `<span class="tiempo-espera ${tardado ? 'tardado' : ''}">${minutos} min</span>`;
+  }
+
+  // Naranja parpadeante a partir de 15 min sin empezar/terminar, rojo parpadeante a partir de 30.
+  function claseAvisoTiempo(creadoEn) {
+    if (!creadoEn) return '';
+    const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
+    if (minutos >= 30) return 'aviso-30';
+    if (minutos >= 15) return 'aviso-15';
+    return '';
+  }
+
+  // Reimprime SOLO una bebida (no toda la comanda de la mesa).
+  async function reimprimirItem(datos) {
+    const { mesa, paraLlevar, clienteLlevar, item } = datos;
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    const html = `
+      <h2>EL MARISQUITO</h2>
+      <div class="centrado chico">Reimpresión — ${hora}</div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print"><strong>${paraLlevar ? `PARA LLEVAR${clienteLlevar ? ' — ' + clienteLlevar : ''}` : `MESA ${mesa}`}</strong></div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print"><span>${item.cantidad}× ${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}</span></div>
+      ${item.notas ? `<div class="chico">— ${item.notas}</div>` : ''}
+      <div class="linea-punteada"></div>
+    `;
+
+    try {
+      await Api.post('/impresion', { tipo: 'comanda', html, estacion: 'barra' });
+      mostrarToast('Bebida reenviada a la impresora');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function avanzarEstado(pedidoId, itemId, nuevoEstado) {
+    try {
+      await Api.patch(`/cocina/pedidos/${pedidoId}/items/${itemId}/estado`, { estado: nuevoEstado });
+      cargarComandas();
+      if (nuevoEstado === 'preparando' && window.aprovecharClicParaImprimir) {
+        window.aprovecharClicParaImprimir();
+      }
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  // Respaldo por si el socket no conecta, y para refrescar el cronómetro
+  setInterval(cargarComandas, 6000);
 </script>
 </body>
 </html>

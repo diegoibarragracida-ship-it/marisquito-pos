@@ -2,21 +2,26 @@ const express = require('express');
 const router = express.Router();
 const Pedido = require('../models/Pedido');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
+const { esDeCocina } = require('../utils/estaciones');
 
-// Ver todos los items pendientes/en preparación agrupados por mesa
+// Ver todos los platillos (NO bebidas/cocteles, esos son de Barra) pendientes/en
+// preparación, agrupados por mesa.
 router.get('/comandas', verificarToken, permitirRoles('cocina', 'admin'), async (req, res) => {
   const pedidos = await Pedido.find({ estadoCuenta: 'abierta' })
     .populate('mesa', 'numero')
-    .populate('items.producto', 'nombre categoria');
+    .populate({
+      path: 'items.producto',
+      select: 'nombre categoria estacion',
+      populate: { path: 'categoria', select: 'estacion' }
+    });
 
-  // Filtra solo items que cocina necesita ver
   const comandas = pedidos.map(p => ({
     pedidoId: p._id,
     mesa: p.mesa ? p.mesa.numero : null,
     paraLlevar: p.tipo === 'para_llevar',
     clienteLlevar: p.clienteLlevar,
     notaGeneral: p.notaGeneral,
-    items: p.items.filter(i => ['pendiente', 'preparando'].includes(i.estado))
+    items: p.items.filter(i => ['pendiente', 'preparando'].includes(i.estado) && esDeCocina(i))
   })).filter(c => c.items.length > 0);
 
   res.json(comandas);

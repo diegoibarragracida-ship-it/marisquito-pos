@@ -359,6 +359,9 @@
       mostrarToast('Cuenta cobrada y mesa liberada');
       cerrarModal('modal-cobrar');
       cargarCuentas();
+      // Aprovechamos este mismo clic (que el cajero de todos modos da en cada venta) para
+      // imprimir lo que esté pendiente, en vez de pedirle que toque el aviso rojo aparte.
+      if (window.aprovecharClicParaImprimir) window.aprovecharClicParaImprimir();
     } catch (err) {
       mostrarToast(err.message, true);
     }
@@ -415,6 +418,8 @@
         mostrarToast(`Pago de ${persona} registrado — falta $${resultado.restante.toFixed(2)}`);
         calcularDivision();
       }
+      // Mismo truco que en "Cobrar": aprovechamos este clic para imprimir lo pendiente.
+      if (window.aprovecharClicParaImprimir) window.aprovecharClicParaImprimir();
     } catch (err) {
       mostrarToast(err.message, true);
     }

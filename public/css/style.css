@@ -925,8 +925,23 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   background: var(--alga);
   color: var(--blanco);
 }
-.tiempo-espera.tardado { background: var(--camaron); animation: parpadeo 1.4s infinite; }
+.tiempo-espera.tardado { background: var(--camaron); }
 @keyframes parpadeo { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+/* Aviso de tiempo en la fila completa del platillo/coctel (no solo el numerito):
+   naranja a partir de 15 min, rojo a partir de 30 min, ambos parpadeando. */
+.comanda-item.aviso-15 {
+  background: #fff1de;
+  animation: parpadeoNaranja 1.4s infinite;
+}
+.comanda-item.aviso-30 {
+  background: #fde2e2;
+  animation: parpadeoRojo 1.1s infinite;
+}
+.comanda-item.aviso-15 .tiempo-espera { background: #d97706; }
+.comanda-item.aviso-30 .tiempo-espera { background: #c0392b; }
+@keyframes parpadeoNaranja { 0%, 100% { background: #fff1de; } 50% { background: #ffd9a8; } }
+@keyframes parpadeoRojo { 0%, 100% { background: #fde2e2; } 50% { background: #f8b4b4; } }
 
 .btn-imprimir {
   background: var(--tinta);
