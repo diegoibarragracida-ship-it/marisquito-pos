@@ -30,21 +30,31 @@
 (function () {
   let procesando = false;
   let estacionesActuales = [];
+  let requiereToqueForzado = false; // true = mostrar el botón de "toca para imprimir" aunque este dispositivo no use RawBT
 
-  window.iniciarImpresionAutomatica = function (estacion) {
+  window.iniciarImpresionAutomatica = function (estacion, opciones) {
     estacionesActuales = Array.isArray(estacion) ? estacion : [estacion];
+    requiereToqueForzado = !!(opciones && opciones.requiereToque);
     asegurarZonaImprimible();
     montarIndicador();
     conectarTiempoRealImpresion();
 
-    if (usaRawBT()) {
-      revisarPendientesRawBT();
-      setInterval(revisarPendientesRawBT, 6000); // respaldo por si el socket se cae
+    if (modoBoton()) {
+      revisarPendientesBoton();
+      setInterval(revisarPendientesBoton, 6000); // respaldo por si el socket se cae
     } else {
       revisarPendientes();
       setInterval(revisarPendientes, 6000); // respaldo por si el socket se cae
     }
   };
+
+  // true si esta pantalla debe esperar un toque real antes de imprimir: ya sea porque
+  // usa RawBT (Bluetooth, siempre necesita un gesto) o porque se le pidió explícitamente
+  // con { requiereToque: true } (ej. Admin/Caja, para no imprimir en automático comandas
+  // que le tocan a otra estación y quedarse con la decisión de "sí, imprímela aquí").
+  function modoBoton() {
+    return usaRawBT() || requiereToqueForzado;
+  }
 
   function asegurarZonaImprimible() {
     if (document.getElementById('zona-imprimible-auto')) return;
@@ -58,7 +68,7 @@
     try {
       const socket = io();
       socket.on('nuevaImpresion', () => {
-        if (usaRawBT()) revisarPendientesRawBT();
+        if (modoBoton()) revisarPendientesBoton();
         else revisarPendientes();
       });
     } catch (err) {
@@ -107,8 +117,9 @@
 
   // Solo CONSULTA si hay algo pendiente (no lo marca como impreso). Así, si nadie ha
   // tocado el aviso todavía, el trabajo se queda honestamente como "pendiente" en vez de
-  // perderse marcado como impreso sin haberse impreso de verdad.
-  async function revisarPendientesRawBT() {
+  // perderse marcado como impreso sin haberse impreso de verdad (o robárselo en silencio
+  // a otra pantalla que también podía imprimirlo, ej. Admin robándole una comanda a Barra).
+  async function revisarPendientesBoton() {
     if (procesando || estacionesActuales.length === 0) return;
     procesando = true;
     try {
@@ -126,8 +137,11 @@
     }
   }
 
-  // Esto SÍ corre dentro del manejador de clic del aviso (gesto real del usuario),
-  // así que el intent de RawBT se dispara sin que Chrome lo bloquee.
+  // Esto SÍ corre dentro del manejador de clic del aviso (gesto real del usuario). Si el
+  // dispositivo usa RawBT, dispara el intent (necesita ese gesto para que Chrome no lo
+  // bloquee). Si no usa RawBT pero de todas formas está en modo botón (ej. Admin/Caja,
+  // para no robarle en silencio una comanda a otra pantalla), imprime normal con
+  // window.print() apenas se toca, en vez de hacerlo solo automáticamente.
   async function imprimirTodoPendienteConGesto() {
     if (procesando) return;
     procesando = true;
@@ -135,17 +149,20 @@
       for (const estacion of estacionesActuales) {
         let trabajo = await Api.get(`/impresion/consumir?estacion=${estacion}`);
         while (trabajo) {
-          const texto = htmlAtextoPlano(trabajo.html);
-          imprimirConRawBT(texto);
-          marcarEnIndicador(trabajo);
-          // Pequeña pausa para no mandar dos intents encimados uno sobre otro.
-          await esperar(700);
+          if (usaRawBT()) {
+            const texto = htmlAtextoPlano(trabajo.html);
+            imprimirConRawBT(texto);
+            marcarEnIndicador(trabajo);
+            await esperar(700); // pequeña pausa para no mandar dos intents encimados
+          } else {
+            await imprimirTrabajo(trabajo);
+          }
           trabajo = await Api.get(`/impresion/consumir?estacion=${estacion}`);
         }
       }
       ocultarAvisoRawBT();
     } catch (err) {
-      console.error('Error imprimiendo por RawBT:', err.message);
+      console.error('Error imprimiendo:', err.message);
       mostrarToast('No se pudo imprimir, se reintentará', true);
     } finally {
       procesando = false;
@@ -159,7 +176,7 @@
   // que aprovechamos justo esa interacción para imprimir lo pendiente sin pedir nada extra.
   // Si esta consola no usa RawBT, no hace nada (el flujo normal ya es 100% automático solo).
   window.aprovecharClicParaImprimir = function () {
-    if (!usaRawBT()) return;
+    if (!modoBoton()) return;
     imprimirTodoPendienteConGesto();
   };
 

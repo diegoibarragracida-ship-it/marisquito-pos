@@ -667,7 +667,10 @@
     cargarProductos();
     inicializarFormProductos();
     conectarTiempoRealVivo();
-    iniciarImpresionAutomatica(['admin', 'barra']); // cuentas (comparte 'admin' con Caja) + comandas de barra (comparte con Caja y con la estación Barra)
+    iniciarImpresionAutomatica(['admin']); // cuentas (comparte 'admin' con Caja). Ya NO recoge comandas de 'barra':
+    // si Admin también las recogiera, se las ganaba en silencio a la pantalla de Barra (sin RawBT, sin toque),
+    // y el aviso rojo de "toca para imprimir" en Barra desaparecía sin que nadie lo tocara ahí — la comanda
+    // sí se imprimía, pero en la impresora de Admin/Caja en vez de la física de Barra.
   }
 
   function conectarTiempoRealVivo() {
