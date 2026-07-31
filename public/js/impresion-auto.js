@@ -1,14 +1,32 @@
 // Motor de impresión automática, reutilizable en cualquier consola (Cocina, Admin, Caja).
 // Cada consola que lo incluye y llama iniciarImpresionAutomatica('cocina') (o con un arreglo,
 // ej. ['cocina','barra']) se vuelve, ella misma, una estación de impresión: no hace falta
-// abrir otra pestaña ni que nadie toque nada, solo dejar la pantalla abierta.
+// abrir otra pestaña, solo dejar la pantalla abierta.
 //
 // 'cocina' -> lo escucha la consola de Cocina.
-// 'barra'  -> comandas de bebidas/cocteles; también las recoge la consola de Cocina
-//             (mismo dispositivo/impresora de la cocina), para que el cocinero no tenga
-//             que hacer nada aparte.
+// 'barra'  -> comandas de bebidas/cocteles, las recoge la consola de Barra (o quien la escuche).
 // 'admin'  -> lo escuchan la consola de Admin Y la de Caja (cualquiera de las 2 que esté
 //             abierta la imprime; /impresion/consumir es atómico así que nunca se duplica).
+//
+// ---------------------------------------------------------------------------------------
+// IMPORTANTE sobre RawBT (impresora Bluetooth desde Android):
+// Android/Chrome bloquea SILENCIOSAMENTE que una página abra otra app (como RawBT) si la
+// orden de abrirla no viene de un toque directo del usuario (esto es una regla de seguridad
+// del propio navegador, no algo que este código pueda evitar). Por eso, cuando la comanda
+// llega sola en segundo plano (por socket), no podemos disparar RawBT sin que nadie toque
+// nada: Chrome lo bloquea y el ticket se pierde en silencio si no se maneja con cuidado.
+//
+// La solución: en vez de intentar imprimir en automático y fallar en silencio, en cuanto
+// llega una comanda mostramos un aviso GRANDE e imposible de ignorar ("Nueva comanda —
+// toca aquí para imprimir"), con sonido y vibración. Ese toque SÍ cuenta como gesto real
+// del usuario, así que RawBT se abre sin problema. Es 1 solo toque en la pantalla (no hay
+// que buscar ningún botón de "Imprimir" en cada comanda ni confirmar nada en un diálogo).
+//
+// Si esta consola NO usa RawBT (por ejemplo, imprime con window.print() en una compu con
+// Chrome en modo kiosk-printing), sí es 100% automática sin ningún toque, porque esa
+// restricción de "gesto del usuario" solo aplica a abrir apps externas por Android Intent,
+// no a imprimir directo a una impresora normal.
+// ---------------------------------------------------------------------------------------
 (function () {
   let procesando = false;
   let estacionesActuales = [];
@@ -17,9 +35,15 @@
     estacionesActuales = Array.isArray(estacion) ? estacion : [estacion];
     asegurarZonaImprimible();
     montarIndicador();
-    revisarPendientes();
     conectarTiempoRealImpresion();
-    setInterval(revisarPendientes, 6000); // respaldo por si el socket se cae
+
+    if (usaRawBT()) {
+      revisarPendientesRawBT();
+      setInterval(revisarPendientesRawBT, 6000); // respaldo por si el socket se cae
+    } else {
+      revisarPendientes();
+      setInterval(revisarPendientes, 6000); // respaldo por si el socket se cae
+    }
   };
 
   function asegurarZonaImprimible() {
@@ -33,18 +57,21 @@
   function conectarTiempoRealImpresion() {
     try {
       const socket = io();
-      socket.on('nuevaImpresion', () => revisarPendientes());
+      socket.on('nuevaImpresion', () => {
+        if (usaRawBT()) revisarPendientesRawBT();
+        else revisarPendientes();
+      });
     } catch (err) {
       console.warn('Socket.io no disponible, la impresión automática seguirá por polling');
     }
   }
 
+  // ---------- Flujo normal (window.print / kiosk-printing): sí puede ser 100% automático ----------
+
   async function revisarPendientes() {
     if (procesando || estacionesActuales.length === 0) return;
     procesando = true;
     try {
-      // Se pide de UNO en uno con /consumir (atómico) hasta que ya no haya nada pendiente,
-      // recorriendo cada estación que esta consola escucha (ej. admin y luego barra).
       for (const estacion of estacionesActuales) {
         let trabajo = await Api.get(`/impresion/consumir?estacion=${estacion}`);
         while (trabajo) {
@@ -61,27 +88,14 @@
 
   async function imprimirTrabajo(trabajo) {
     try {
-      if (usaRawBT()) {
-        const texto = htmlAtextoPlano(trabajo.html);
-        imprimirConRawBT(texto);
-        // RawBT no avisa cuando terminó de imprimir. Lo único que sí podemos detectar es
-        // que Android nos manda de regreso a esta pestaña después de abrir RawBT (o de que
-        // el usuario cierre RawBT) — usamos eso como señal de "ya se disparó" antes de
-        // seguir con el siguiente ticket, en vez de solo un tiempo fijo a ciegas.
-        await esperarRegresoDeApp();
-      } else {
-        const zona = document.getElementById('zona-imprimible-auto');
-        zona.innerHTML = trabajo.html;
-        window.print();
-        await esperar(1200);
-      }
+      const zona = document.getElementById('zona-imprimible-auto');
+      zona.innerHTML = trabajo.html;
+      window.print();
+      await esperar(1200);
       marcarEnIndicador(trabajo);
     } catch (err) {
-      // Si algo truena al imprimir (RawBT no instalado, error de DOM, etc.), el trabajo
-      // YA se había marcado como "impreso" al tomarlo con /consumir — lo regresamos a
-      // pendiente para que no se pierda en silencio y alguien lo note/reimprima.
       console.error('No se pudo imprimir, se regresa a la cola:', err.message);
-      try { await Api.post(`/impresion/${trabajo._id}/reimprimir`, {}); } catch (e2) { /* si esto también falla, queda visible en el Centro de Impresión como "impreso" para revisarlo a mano */ }
+      try { await Api.post(`/impresion/${trabajo._id}/reimprimir`, {}); } catch (e2) { /* queda visible en el Centro de Impresión */ }
     }
   }
 
@@ -89,33 +103,53 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Espera a que la pestaña vuelva a estar visible (el usuario regresó de RawBT), con un
-  // tope máximo por si el navegador no dispara el evento (para no trabarse ahí para siempre).
-  function esperarRegresoDeApp() {
-    return new Promise(resolve => {
-      let resuelto = false;
-      const terminar = () => {
-        if (resuelto) return;
-        resuelto = true;
-        document.removeEventListener('visibilitychange', onVisible);
-        resolve();
-      };
-      const onVisible = () => { if (document.visibilityState === 'visible') terminar(); };
-      document.addEventListener('visibilitychange', onVisible);
-      setTimeout(terminar, 4000); // tope de seguridad
-    });
+  // ---------- Flujo RawBT: necesita 1 toque real para poder abrir la app ----------
+
+  // Solo CONSULTA si hay algo pendiente (no lo marca como impreso). Así, si nadie ha
+  // tocado el aviso todavía, el trabajo se queda honestamente como "pendiente" en vez de
+  // perderse marcado como impreso sin haberse impreso de verdad.
+  async function revisarPendientesRawBT() {
+    if (procesando || estacionesActuales.length === 0) return;
+    procesando = true;
+    try {
+      let totalPendientes = 0;
+      for (const estacion of estacionesActuales) {
+        const pendientes = await Api.get(`/impresion/pendientes?estacion=${estacion}`);
+        totalPendientes += (pendientes || []).length;
+      }
+      if (totalPendientes > 0) mostrarAvisoRawBT(totalPendientes);
+      else ocultarAvisoRawBT();
+    } catch (err) {
+      console.error('Error revisando cola de impresión:', err.message);
+    } finally {
+      procesando = false;
+    }
   }
 
-  // ---------- RawBT (impresora Bluetooth desde Android) ----------
-
-  const esAndroid = /Android/i.test(navigator.userAgent);
-
-  function claveRawBT() {
-    return 'usarRawBT_' + estacionesActuales.join('+');
-  }
-
-  function usaRawBT() {
-    return esAndroid && localStorage.getItem(claveRawBT()) === '1';
+  // Esto SÍ corre dentro del manejador de clic del aviso (gesto real del usuario),
+  // así que el intent de RawBT se dispara sin que Chrome lo bloquee.
+  async function imprimirTodoPendienteConGesto() {
+    if (procesando) return;
+    procesando = true;
+    try {
+      for (const estacion of estacionesActuales) {
+        let trabajo = await Api.get(`/impresion/consumir?estacion=${estacion}`);
+        while (trabajo) {
+          const texto = htmlAtextoPlano(trabajo.html);
+          imprimirConRawBT(texto);
+          marcarEnIndicador(trabajo);
+          // Pequeña pausa para no mandar dos intents encimados uno sobre otro.
+          await esperar(700);
+          trabajo = await Api.get(`/impresion/consumir?estacion=${estacion}`);
+        }
+      }
+      ocultarAvisoRawBT();
+    } catch (err) {
+      console.error('Error imprimiendo por RawBT:', err.message);
+      mostrarToast('No se pudo imprimir, se reintentará', true);
+    } finally {
+      procesando = false;
+    }
   }
 
   function htmlAtextoPlano(html) {
@@ -133,6 +167,78 @@
   function imprimirConRawBT(texto) {
     const sufijo = '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
     window.location.href = 'intent:' + encodeURI(texto) + sufijo;
+  }
+
+  // ---------- Aviso grande de "toca para imprimir" (RawBT) ----------
+
+  let sonidoAvisado = false;
+
+  function mostrarAvisoRawBT(cantidad) {
+    let aviso = document.getElementById('aviso-tocar-imprimir');
+    if (aviso) {
+      aviso.querySelector('#texto-aviso-tocar').textContent = mensajeAviso(cantidad);
+      return;
+    }
+
+    aviso = document.createElement('button');
+    aviso.id = 'aviso-tocar-imprimir';
+    aviso.style.cssText = 'position:fixed; top:0; left:0; right:0; width:100%; border:none; cursor:pointer; background:#c0392b; color:#fff; padding:16px; font-size:1rem; font-weight:700; text-align:center; z-index:700; box-shadow:0 3px 10px rgba(0,0,0,.25); animation:parpadeoAvisoImprimir 1s infinite;';
+    aviso.innerHTML = `🖨️ <span id="texto-aviso-tocar">${mensajeAviso(cantidad)}</span>`;
+
+    if (!document.getElementById('estilo-parpadeo-aviso')) {
+      const estilo = document.createElement('style');
+      estilo.id = 'estilo-parpadeo-aviso';
+      estilo.textContent = '@keyframes parpadeoAvisoImprimir { 0%,100% { opacity:1; } 50% { opacity:0.72; } }';
+      document.head.appendChild(estilo);
+    }
+
+    aviso.addEventListener('click', () => {
+      aviso.disabled = true;
+      aviso.querySelector('#texto-aviso-tocar').textContent = 'Imprimiendo…';
+      imprimirTodoPendienteConGesto().finally(() => { aviso.disabled = false; });
+    });
+
+    document.body.appendChild(aviso);
+    avisarConSonidoYVibracion();
+  }
+
+  function mensajeAviso(cantidad) {
+    return cantidad === 1 ? 'Nueva comanda — TOCA AQUÍ para imprimir' : `${cantidad} comandas esperando — TOCA AQUÍ para imprimir`;
+  }
+
+  function ocultarAvisoRawBT() {
+    const aviso = document.getElementById('aviso-tocar-imprimir');
+    if (aviso) aviso.remove();
+  }
+
+  function avisarConSonidoYVibracion() {
+    if (sonidoAvisado) return; // no repetir sonido en cada refresco mientras el aviso sigue visible
+    sonidoAvisado = true;
+    try {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (err) { /* si el navegador bloquea el audio sin interacción previa, no pasa nada grave */ }
+    setTimeout(() => { sonidoAvisado = false; }, 4000);
+  }
+
+  // ---------- RawBT: activar/desactivar en este dispositivo ----------
+
+  const esAndroid = /Android/i.test(navigator.userAgent);
+
+  function claveRawBT() {
+    return 'usarRawBT_' + estacionesActuales.join('+');
+  }
+
+  function usaRawBT() {
+    return esAndroid && localStorage.getItem(claveRawBT()) === '1';
   }
 
   // ---------- Indicador visual pequeño (estado + configurar Bluetooth) ----------
@@ -157,20 +263,19 @@
       chk.checked = localStorage.getItem(claveRawBT()) === '1';
       chk.addEventListener('change', () => {
         localStorage.setItem(claveRawBT(), chk.checked ? '1' : '0');
-        mostrarToast(chk.checked ? 'Este dispositivo imprimirá directo por RawBT' : 'Este dispositivo usará el diálogo normal de impresión');
-        actualizarAvisoRawBT();
+        mostrarToast(chk.checked ? 'Este dispositivo imprimirá por RawBT (toca el aviso rojo cuando llegue una comanda)' : 'Este dispositivo usará el diálogo normal de impresión');
+        actualizarAvisoRawBTFaltante();
+        location.reload(); // reinicia el motor con el modo correcto (RawBT vs normal)
       });
     }
 
     document.body.appendChild(cont);
-    if (esAndroid) actualizarAvisoRawBT();
+    if (esAndroid) actualizarAvisoRawBTFaltante();
   }
 
-  // Aviso grande y fijo (no la casilla chiquita de la esquina, que es fácil de no ver)
-  // recordando activar RawBT la primera vez que se abre esta pantalla en un Android sin
-  // configurar. Sin esto, cada comanda cae en el diálogo normal de impresión de Android
-  // y alguien tiene que tocar "Imprimir" a mano — justo lo que NO queremos en cocina.
-  function actualizarAvisoRawBT() {
+  // Aviso (independiente del rojo de "toca para imprimir") que recuerda activar la
+  // casilla RawBT la primera vez que se abre esta pantalla en un Android sin configurar.
+  function actualizarAvisoRawBTFaltante() {
     const activo = localStorage.getItem(claveRawBT()) === '1';
     let aviso = document.getElementById('aviso-rawbt-pendiente');
 
@@ -178,16 +283,14 @@
       if (aviso) aviso.remove();
       return;
     }
-
-    if (aviso) return; // ya se está mostrando
+    if (aviso) return;
 
     aviso = document.createElement('div');
     aviso.id = 'aviso-rawbt-pendiente';
     aviso.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#fdf1d6; color:#7a4a00; padding:10px 16px; font-size:0.8rem; text-align:center; z-index:600; box-shadow:0 2px 8px rgba(0,0,0,.08);';
     aviso.innerHTML = `
-      ⚠️ Falta activar la impresión automática en este dispositivo — marca la casilla
-      <strong>"RawBT"</strong> abajo a la derecha (una sola vez). Mientras tanto, las comandas
-      van a pedir que alguien toque "Imprimir" a mano.
+      ⚠️ Falta activar la impresión por RawBT en este dispositivo — marca la casilla
+      <strong>"RawBT"</strong> abajo a la derecha (una sola vez).
       <button id="btn-cerrar-aviso-rawbt" style="margin-left:10px; border:none; background:transparent; color:#7a4a00; text-decoration:underline; cursor:pointer; font-size:0.78rem;">Entendido</button>
     `;
     document.body.appendChild(aviso);
