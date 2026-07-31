@@ -152,6 +152,17 @@
     }
   }
 
+  // ---------- "2x1": aprovechar un clic que el cocinero YA iba a dar ----------
+  // En vez de pedirle un toque aparte (la franja roja), cualquier pantalla puede llamar a
+  // esto dentro del manejador de OTRO botón que el cocinero de cualquier forma tiene que
+  // tocar (ej. "Empezar a preparar", "Marcar listo"). Ese clic cuenta como gesto real, así
+  // que aprovechamos justo esa interacción para imprimir lo pendiente sin pedir nada extra.
+  // Si esta consola no usa RawBT, no hace nada (el flujo normal ya es 100% automático solo).
+  window.aprovecharClicParaImprimir = function () {
+    if (!usaRawBT()) return;
+    imprimirTodoPendienteConGesto();
+  };
+
   function htmlAtextoPlano(html) {
     const conLineas = html.replace(/<div class="linea-punteada"[^>]*>\s*<\/div>/g, '--------------------------------');
     const contenedor = document.createElement('div');
@@ -171,7 +182,8 @@
 
   // ---------- Aviso grande de "toca para imprimir" (RawBT) ----------
 
-  let sonidoAvisado = false;
+  let intervaloInsistencia = null;
+  let wakeLock = null;
 
   function mostrarAvisoRawBT(cantidad) {
     let aviso = document.getElementById('aviso-tocar-imprimir');
@@ -199,7 +211,14 @@
     });
 
     document.body.appendChild(aviso);
-    avisarConSonidoYVibracion();
+    pedirPantallaDespierta();
+
+    // El cocinero no siempre está viendo la tablet, así que un solo "bip" no basta:
+    // repetimos sonido + vibración cada 4s mientras el aviso siga sin tocarse.
+    sonarAvisoUnaVez();
+    if (!intervaloInsistencia) {
+      intervaloInsistencia = setInterval(sonarAvisoUnaVez, 4000);
+    }
   }
 
   function mensajeAviso(cantidad) {
@@ -209,24 +228,44 @@
   function ocultarAvisoRawBT() {
     const aviso = document.getElementById('aviso-tocar-imprimir');
     if (aviso) aviso.remove();
+    if (intervaloInsistencia) {
+      clearInterval(intervaloInsistencia);
+      intervaloInsistencia = null;
+    }
+    liberarPantallaDespierta();
   }
 
-  function avisarConSonidoYVibracion() {
-    if (sonidoAvisado) return; // no repetir sonido en cada refresco mientras el aviso sigue visible
-    sonidoAvisado = true;
+  function sonarAvisoUnaVez() {
     try {
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]);
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      // Dos tonos (como un timbre de cocina) en vez de un solo bip, para que se note más.
+      [880, 660].forEach((frecuencia, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = frecuencia;
+        gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.22);
+        osc.start(ctx.currentTime + i * 0.22);
+        osc.stop(ctx.currentTime + i * 0.22 + 0.2);
+      });
     } catch (err) { /* si el navegador bloquea el audio sin interacción previa, no pasa nada grave */ }
-    setTimeout(() => { sonidoAvisado = false; }, 4000);
+  }
+
+  // Intenta que la pantalla no se apague/bloquee mientras hay una comanda esperando,
+  // para que el aviso rojo se siga viendo aunque nadie haya tocado la tablet en un rato.
+  // Si el navegador no lo soporta o lo bloquea, simplemente no hace nada (no truena).
+  async function pedirPantallaDespierta() {
+    try {
+      if (wakeLock || !('wakeLock' in navigator)) return;
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (err) { /* algunos navegadores solo lo permiten justo después de un toque; no pasa nada */ }
+  }
+
+  function liberarPantallaDespierta() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   }
 
   // ---------- RawBT: activar/desactivar en este dispositivo ----------
