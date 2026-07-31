@@ -158,10 +158,40 @@
       chk.addEventListener('change', () => {
         localStorage.setItem(claveRawBT(), chk.checked ? '1' : '0');
         mostrarToast(chk.checked ? 'Este dispositivo imprimirá directo por RawBT' : 'Este dispositivo usará el diálogo normal de impresión');
+        actualizarAvisoRawBT();
       });
     }
 
     document.body.appendChild(cont);
+    if (esAndroid) actualizarAvisoRawBT();
+  }
+
+  // Aviso grande y fijo (no la casilla chiquita de la esquina, que es fácil de no ver)
+  // recordando activar RawBT la primera vez que se abre esta pantalla en un Android sin
+  // configurar. Sin esto, cada comanda cae en el diálogo normal de impresión de Android
+  // y alguien tiene que tocar "Imprimir" a mano — justo lo que NO queremos en cocina.
+  function actualizarAvisoRawBT() {
+    const activo = localStorage.getItem(claveRawBT()) === '1';
+    let aviso = document.getElementById('aviso-rawbt-pendiente');
+
+    if (activo) {
+      if (aviso) aviso.remove();
+      return;
+    }
+
+    if (aviso) return; // ya se está mostrando
+
+    aviso = document.createElement('div');
+    aviso.id = 'aviso-rawbt-pendiente';
+    aviso.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#fdf1d6; color:#7a4a00; padding:10px 16px; font-size:0.8rem; text-align:center; z-index:600; box-shadow:0 2px 8px rgba(0,0,0,.08);';
+    aviso.innerHTML = `
+      ⚠️ Falta activar la impresión automática en este dispositivo — marca la casilla
+      <strong>"RawBT"</strong> abajo a la derecha (una sola vez). Mientras tanto, las comandas
+      van a pedir que alguien toque "Imprimir" a mano.
+      <button id="btn-cerrar-aviso-rawbt" style="margin-left:10px; border:none; background:transparent; color:#7a4a00; text-decoration:underline; cursor:pointer; font-size:0.78rem;">Entendido</button>
+    `;
+    document.body.appendChild(aviso);
+    document.getElementById('btn-cerrar-aviso-rawbt').addEventListener('click', () => aviso.remove());
   }
 
   function marcarEnIndicador(trabajo) {

@@ -68,7 +68,7 @@
         <div class="comanda-card">
           <div class="comanda-header">
             <span class="mesa-num">${c.paraLlevar ? `🥡 Para llevar${c.clienteLlevar ? ' — ' + c.clienteLlevar : ''}` : `Mesa ${c.mesa}`}</span>
-            <button class="btn-imprimir" style="padding:5px 10px; font-size:0.72rem;" onclick='imprimirComanda(${JSON.stringify(c).replace(/'/g, "&apos;")})'>🖨 Imprimir</button>
+            <button class="btn-imprimir" style="padding:5px 10px; font-size:0.72rem;" title="Esta comanda ya se imprimió sola al llegar — usa este botón solo si necesitas volver a imprimirla" onclick='imprimirComanda(${JSON.stringify(c).replace(/'/g, "&apos;")})'>🖨 Reimprimir</button>
           </div>
           ${c.notaGeneral ? `<div style="padding:8px 16px; background:#fdf6e8; font-size:0.78rem; font-style:italic;">📌 ${c.notaGeneral}</div>` : ''}
           ${c.items.map(item => `
@@ -115,7 +115,7 @@
 
     try {
       await Api.post('/impresion', { tipo: 'comanda', html, estacion: 'cocina' });
-      mostrarToast('Comanda enviada a la impresora');
+      mostrarToast('Comanda reenviada a la impresora');
     } catch (err) {
       mostrarToast(err.message, true);
     }
