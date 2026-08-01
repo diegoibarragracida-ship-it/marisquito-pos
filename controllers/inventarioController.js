@@ -56,61 +56,71 @@ async function recetaEfectivaFusionada(productoId, varianteNombre = '') {
   return fusionarReceta(await obtenerRecetaEfectiva(productoId, varianteNombre));
 }
 
+// Revisa el stock usando una receta que YA se obtuvo (sin volver a golpear la
+// base de datos) — antes esto se recalculaba desde cero cada vez que se llamaba.
+function verificarStockConReceta(receta, cantidad) {
+  for (const item of receta) {
+    const requerido = item.cantidad * cantidad;
+    if (item.insumo.stockActual < requerido) {
+      return { ok: false, faltante: item.insumo.nombre, disponible: item.insumo.stockActual, requerido };
+    }
+  }
+  return { ok: true };
+}
+
 /**
  * Verifica si hay stock suficiente para vender "cantidad" unidades de un producto
  * (o paquete/variante), revisando cada insumo de su receta efectiva.
  */
 async function hayStockSuficiente(productoId, cantidad = 1, varianteNombre = '') {
   const receta = await recetaEfectivaFusionada(productoId, varianteNombre);
-
-  for (const item of receta) {
-    const insumo = item.insumo;
-    const requerido = item.cantidad * cantidad;
-
-    if (insumo.stockActual < requerido) {
-      return {
-        ok: false,
-        faltante: insumo.nombre,
-        disponible: insumo.stockActual,
-        requerido
-      };
-    }
-  }
-
-  return { ok: true };
+  return verificarStockConReceta(receta, cantidad);
 }
 
 /**
  * Descuenta del stock de cada insumo lo que consume el producto (o paquete/variante) vendido.
  * Se debe llamar cuando el mesero confirma/envía el pedido a cocina.
+ *
+ * OPTIMIZADO: antes esta función calculaba la receta 3 veces (aquí, dentro de
+ * hayStockSuficiente, y otra vez al revisar si se agotó) y guardaba cada insumo
+ * por separado con .save(). Ahora la receta se calcula UNA vez, y los insumos
+ * se descuentan todos juntos con bulkWrite — muchas menos idas y vueltas a la
+ * base de datos, sobre todo cuando el pedido trae varios productos.
  */
 async function descontarStockPorVenta(productoId, cantidad = 1, varianteNombre = '') {
   const receta = await recetaEfectivaFusionada(productoId, varianteNombre);
 
-  const check = await hayStockSuficiente(productoId, cantidad, varianteNombre);
+  const check = verificarStockConReceta(receta, cantidad);
   if (!check.ok) {
     throw new Error(
       `Stock insuficiente de "${check.faltante}". Disponible: ${check.disponible}, requerido: ${check.requerido}`
     );
   }
 
-  for (const item of receta) {
-    const insumo = item.insumo;
-    const consumo = item.cantidad * cantidad;
+  if (receta.length > 0) {
+    // Descuenta TODOS los insumos en una sola operación (antes eran N .save() por separado)
+    await Insumo.bulkWrite(receta.map(item => ({
+      updateOne: {
+        filter: { _id: item.insumo._id },
+        update: { $inc: { stockActual: -(item.cantidad * cantidad) } }
+      }
+    })));
 
-    insumo.stockActual -= consumo;
-    await insumo.save();
-
-    await MovimientoInsumo.create({ insumo: insumo._id, tipo: 'venta', cantidad: consumo });
+    // Registra los movimientos también en un solo viaje (antes eran N .create() por separado)
+    await MovimientoInsumo.insertMany(receta.map(item => ({
+      insumo: item.insumo._id,
+      tipo: 'venta',
+      cantidad: item.cantidad * cantidad
+    })));
   }
 
-  // Si el producto ya no tiene insumos suficientes para otra venta, se marca agotado
-  // (solo para productos simples; los productos con variantes de tamaño se gestionan
-  // manualmente ya que un tamaño puede agotarse sin que los demás se agoten)
-  const producto = await Producto.findById(productoId);
-  if (!producto.variantes || producto.variantes.length === 0) {
-    const siguienteCheck = await hayStockSuficiente(productoId, 1, varianteNombre);
-    if (!siguienteCheck.ok) {
+  // ¿Ya no alcanza para una venta más? Se calcula con los números que ya tenemos
+  // en memoria (sin volver a consultar la base de datos ni recalcular la receta).
+  const yaNoAlcanza = receta.some(item => (item.insumo.stockActual - item.cantidad * cantidad) < item.cantidad);
+
+  if (yaNoAlcanza) {
+    const producto = await Producto.findById(productoId).select('variantes disponible');
+    if (producto && (!producto.variantes || producto.variantes.length === 0) && producto.disponible) {
       producto.disponible = false;
       await producto.save();
     }
@@ -125,14 +135,17 @@ async function descontarStockPorVenta(productoId, cantidad = 1, varianteNombre =
 async function revertirStockPorCancelacion(productoId, cantidad = 1, varianteNombre = '') {
   const receta = await recetaEfectivaFusionada(productoId, varianteNombre);
 
-  for (const item of receta) {
-    const insumo = item.insumo;
-    insumo.stockActual += item.cantidad * cantidad;
-    await insumo.save();
+  if (receta.length > 0) {
+    await Insumo.bulkWrite(receta.map(item => ({
+      updateOne: {
+        filter: { _id: item.insumo._id },
+        update: { $inc: { stockActual: item.cantidad * cantidad } }
+      }
+    })));
   }
 
-  const producto = await Producto.findById(productoId);
-  if (!producto.disponible) {
+  const producto = await Producto.findById(productoId).select('disponible');
+  if (producto && !producto.disponible) {
     producto.disponible = true;
     await producto.save();
   }
