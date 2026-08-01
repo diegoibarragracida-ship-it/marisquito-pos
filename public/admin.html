@@ -24,6 +24,8 @@
 </div>
 
 <div class="contenedor">
+  <div id="aviso-cuenta-pedida"></div>
+
   <div class="encabezado-seccion">
     <div>
       <div class="eyebrow">Panel</div>
@@ -678,6 +680,8 @@
     cargarCategorias();
     cargarInsumos();
     cargarProductos();
+    revisarCuentaPedida();
+    setInterval(revisarCuentaPedida, 6000);
     inicializarFormProductos();
     conectarTiempoRealVivo();
     iniciarImpresionAutomatica(['admin', 'barra'], { requiereToque: true }); // cuentas + comandas de barra
@@ -825,6 +829,38 @@
   }, 6000);
 
   /* ---------------- MESAS ---------------- */
+  async function revisarCuentaPedida() {
+    const cont = document.getElementById('aviso-cuenta-pedida');
+    try {
+      const mesas = await Api.get('/mesas');
+      const esperando = mesas.filter(m => m.estado === 'cuenta_pedida');
+
+      if (esperando.length === 0) {
+        cont.innerHTML = '';
+        return;
+      }
+
+      cont.innerHTML = `
+        <div style="background:#c9a227; color:#fff; border-radius:12px; padding:14px 16px; margin-bottom:16px; box-shadow:0 4px 14px rgba(201,162,39,0.35);">
+          <div style="font-weight:700; margin-bottom:8px;">🔔 ${esperando.length === 1 ? 'Pidieron la cuenta' : esperando.length + ' mesas pidieron la cuenta'}</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${esperando.map(m => `
+              <button onclick="irACobrarMesa('${m._id}')" style="background:#fff; color:#8a6d1a; border:none; border-radius:8px; padding:10px 14px; font-weight:700; text-align:left; cursor:pointer; font-size:0.9rem;">
+                Mesa ${m.numero} — toca para ir a cobrar
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      // Silencioso: si falla este sondeo de fondo no interrumpimos el resto del panel
+    }
+  }
+
+  function irACobrarMesa(mesaId) {
+    window.open(`/caja.html?cobrarMesa=${mesaId}`, 'marisquito_caja');
+  }
+
   async function cargarMesas() {
     const cont = document.getElementById('lista-mesas');
     try {

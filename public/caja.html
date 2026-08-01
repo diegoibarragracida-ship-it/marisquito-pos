@@ -19,6 +19,8 @@
 
 <div class="contenedor">
 
+  <div id="aviso-cuenta-pedida"></div>
+
   <div class="turno-banda" id="turno-banda">
     <div class="cargando">Revisando turno…</div>
   </div>
@@ -229,10 +231,16 @@
     }
   }
 
+  let pedidosCache = [];
+
   async function cargarCuentas() {
     const cont = document.getElementById('grid-cuentas');
     try {
       const pedidos = await Api.get('/pedidos');
+      pedidosCache = pedidos;
+      pintarAvisoCuentaPedida(pedidos);
+      atenderCobroPorUrl(pedidos);
+
       if (pedidos.length === 0) {
         cont.innerHTML = '<div class="ticket-vacio">No hay cuentas abiertas por ahora</div>';
         return;
@@ -256,6 +264,50 @@
       }).join('');
     } catch (err) {
       mostrarToast(err.message, true);
+    }
+  }
+
+  function pintarAvisoCuentaPedida(pedidos) {
+    const cont = document.getElementById('aviso-cuenta-pedida');
+    const esperando = pedidos.filter(p => p.mesa && p.mesa.estado === 'cuenta_pedida');
+
+    if (esperando.length === 0) {
+      cont.innerHTML = '';
+      return;
+    }
+
+    cont.innerHTML = `
+      <div style="background:#c9a227; color:#fff; border-radius:12px; padding:14px 16px; margin-bottom:16px; box-shadow:0 4px 14px rgba(201,162,39,0.35);">
+        <div style="font-weight:700; margin-bottom:8px;">🔔 ${esperando.length === 1 ? 'Pidieron la cuenta' : esperando.length + ' mesas pidieron la cuenta'}</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${esperando.map(p => `
+            <button onclick='abrirCobroDesdeAviso(${JSON.stringify(p._id)})' style="background:#fff; color:#8a6d1a; border:none; border-radius:8px; padding:10px 14px; font-weight:700; text-align:left; cursor:pointer; font-size:0.9rem;">
+              Mesa ${p.mesa.numero} — toca para cobrar
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function abrirCobroDesdeAviso(pedidoId) {
+    const pedido = pedidosCache.find(p => p._id === pedidoId);
+    if (pedido) abrirCobro(pedido);
+  }
+
+  // Si venimos de Admin con "?cobrarMesa=<mesaId>", abre el cobro de esa mesa solo
+  // (una vez) y limpia la URL para que no se vuelva a abrir al refrescar.
+  function atenderCobroPorUrl(pedidos) {
+    const params = new URLSearchParams(window.location.search);
+    const mesaId = params.get('cobrarMesa');
+    if (!mesaId) return;
+
+    history.replaceState(null, '', '/caja.html');
+    const pedido = pedidos.find(p => p.mesa && p.mesa._id === mesaId);
+    if (pedido) {
+      abrirCobro(pedido);
+    } else {
+      mostrarToast('Esa mesa ya no tiene una cuenta abierta');
     }
   }
 
