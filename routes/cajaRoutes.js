@@ -159,7 +159,8 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
   }
 });
 
-// Corte del día: ventas (por método de pago) + gastos de hoy, para el botón de "Corte diario"
+// Corte del día: ventas (por método de pago) + gastos de hoy + detalle de cada venta
+// (hora y quién la cobró/atendió), para el botón de "Corte diario"
 router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
   try {
     const inicioDia = new Date();
@@ -168,7 +169,7 @@ router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async
     const pedidosHoy = await Pedido.find({
       estadoCuenta: 'cerrada',
       updatedAt: { $gte: inicioDia }
-    });
+    }).populate('mesero', 'nombre').populate('mesa', 'numero').sort('updatedAt');
 
     const ventas = { efectivo: 0, tarjeta: 0, mixto: 0, total: 0, numCuentas: pedidosHoy.length };
     for (const p of pedidosHoy) {
@@ -177,15 +178,86 @@ router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async
       ventas.total += p.total;
     }
 
+    // Una línea por cada venta cobrada hoy, con la hora exacta y quién la levantó
+    // (el mesero que tomó la orden; si fue "para llevar" sin mesero se marca así).
+    const detalleVentas = pedidosHoy.map(p => ({
+      hora: p.updatedAt,
+      mesero: p.mesero ? p.mesero.nombre : 'Sin mesero',
+      referencia: p.mesa ? `Mesa ${p.mesa.numero}` : `Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`,
+      metodoPago: p.metodoPago || 'efectivo',
+      total: p.total || 0
+    }));
+
     const gastosHoy = await Gasto.find({ fecha: { $gte: inicioDia } });
     const totalGastos = gastosHoy.reduce((acc, g) => acc + g.monto, 0);
+    const gastosFijos = gastosHoy.filter(g => g.tipo === 'fijo').reduce((acc, g) => acc + g.monto, 0);
+    const gastosVariables = totalGastos - gastosFijos;
 
     res.json({
       fecha: inicioDia,
       ventas,
-      gastos: { total: totalGastos, detalle: gastosHoy },
+      detalleVentas,
+      gastos: { total: totalGastos, fijos: gastosFijos, variables: gastosVariables, detalle: gastosHoy },
       utilidadBruta: ventas.total - totalGastos
     });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Historial de cortes, un renglón por día (incluye los días sin ninguna venta como $0).
+// Empieza en el día de HOY y se va llenando solo, día tras día, según pasa el tiempo —
+// no requiere ninguna acción manual, es puro cálculo sobre lo que ya se fue cobrando.
+router.get('/corte-historial', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  try {
+    const dias = Math.min(Number(req.query.dias) || 30, 90);
+    const inicioRango = new Date();
+    inicioRango.setHours(0, 0, 0, 0);
+    inicioRango.setDate(inicioRango.getDate() - (dias - 1));
+
+    const [pedidos, gastos] = await Promise.all([
+      Pedido.find({ estadoCuenta: 'cerrada', updatedAt: { $gte: inicioRango } }),
+      Gasto.find({ fecha: { $gte: inicioRango } })
+    ]);
+
+    // Arma un renglón vacío para cada día del rango, del más viejo al más nuevo
+    const porDia = {};
+    for (let i = 0; i < dias; i++) {
+      const d = new Date(inicioRango);
+      d.setDate(d.getDate() + i);
+      const clave = d.toISOString().slice(0, 10);
+      porDia[clave] = {
+        fecha: clave,
+        numCuentas: 0,
+        ventas: { efectivo: 0, tarjeta: 0, mixto: 0, total: 0 },
+        gastosFijos: 0,
+        gastosVariables: 0,
+        utilidadBruta: 0
+      };
+    }
+
+    for (const p of pedidos) {
+      const clave = p.updatedAt.toISOString().slice(0, 10);
+      if (!porDia[clave]) continue;
+      const metodo = p.metodoPago || 'efectivo';
+      porDia[clave].numCuentas += 1;
+      if (porDia[clave].ventas[metodo] !== undefined) porDia[clave].ventas[metodo] += p.total || 0;
+      porDia[clave].ventas.total += p.total || 0;
+    }
+
+    for (const g of gastos) {
+      const clave = new Date(g.fecha).toISOString().slice(0, 10);
+      if (!porDia[clave]) continue;
+      if (g.tipo === 'fijo') porDia[clave].gastosFijos += g.monto;
+      else porDia[clave].gastosVariables += g.monto;
+    }
+
+    const resultado = Object.values(porDia).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    for (const dia of resultado) {
+      dia.utilidadBruta = dia.ventas.total - dia.gastosFijos - dia.gastosVariables;
+    }
+
+    res.json(resultado);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
