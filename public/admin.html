@@ -15,10 +15,10 @@
     <span class="sub">Administración</span>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
-    <a href="/mesero.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="clipboard-list"></i> Levantar pedido</a>
-    <a href="/caja.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="circle-dollar-sign"></i> Cobrar (Caja)</a>
-    <a href="/cocina.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="chef-hat"></i> Ver cocina</a>
-    <a href="/barra.html" target="_blank" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="martini"></i> Ver barra</a>
+    <a href="/mesero.html" target="marisquito_mesero" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="clipboard-list"></i> Levantar pedido</a>
+    <a href="/caja.html" target="marisquito_caja" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="circle-dollar-sign"></i> Cobrar (Caja)</a>
+    <a href="/cocina.html" target="marisquito_cocina" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="chef-hat"></i> Ver cocina</a>
+    <a href="/barra.html" target="marisquito_barra" class="btn-volver btn-con-icono" style="width:auto; padding:8px 14px; font-size:0.8rem; text-decoration:none;"><i data-lucide="martini"></i> Ver barra</a>
     <div class="usuario" id="barra-usuario"></div>
   </div>
 </div>
@@ -69,7 +69,7 @@
         Solo asegúrate de dejar esta pestaña abierta en el dispositivo conectado a la impresora
         (o con la impresora Bluetooth ya emparejada si usas RawBT en Android).
       </p>
-      <button class="btn-crear" onclick="window.open('/impresora.html', '_blank')">Ver centro de impresión (historial / reimprimir)</button>
+      <button class="btn-crear" onclick="window.open('/impresora.html', 'marisquito_impresion')">Ver centro de impresión (historial / reimprimir)</button>
     </div>
   </div>
 
@@ -667,10 +667,11 @@
     cargarProductos();
     inicializarFormProductos();
     conectarTiempoRealVivo();
-    iniciarImpresionAutomatica(['admin']); // cuentas (comparte 'admin' con Caja). Ya NO recoge comandas de 'barra':
-    // si Admin también las recogiera, se las ganaba en silencio a la pantalla de Barra (sin RawBT, sin toque),
-    // y el aviso rojo de "toca para imprimir" en Barra desaparecía sin que nadie lo tocara ahí — la comanda
-    // sí se imprimía, pero en la impresora de Admin/Caja en vez de la física de Barra.
+    iniciarImpresionAutomatica(['admin', 'barra'], { requiereToque: true }); // cuentas + comandas de barra
+    // (comparte 'admin' con Caja, y 'barra' con Caja y con la estación Barra). requiereToque:true
+    // hace que SIEMPRE aparezca el botón rojo "toca para imprimir" en vez de imprimir solo en
+    // automático — así nunca se le roba en silencio una comanda a otra pantalla que también
+    // la estaba esperando (ej. a la pantalla dedicada de Barra).
   }
 
   function conectarTiempoRealVivo() {
@@ -828,10 +829,21 @@
           <div class="acciones">
             ${m.estado === 'libre'
               ? `<button class="btn-mini-eliminar" onclick="eliminarMesa('${m._id}')">Eliminar</button>`
-              : `<span class="secundario">En uso</span>`}
+              : `<button class="btn-mini-toggle" title="Solo úsalo si la mesa se quedó atorada (ej. sale 'Cuenta pedida' pero ya no tiene ninguna cuenta abierta)" onclick="liberarMesaManual('${m._id}', ${m.numero})">🔓 Liberar</button>`}
           </div>
         </div>
       `).join('');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function liberarMesaManual(id, numero) {
+    if (!confirm(`¿Forzar la Mesa ${numero} a "libre"? Solo hazlo si está atorada (sin cuenta abierta de verdad). Si tiene consumo pendiente, ciérralo desde Caja en vez de esto.`)) return;
+    try {
+      await Api.patch(`/mesas/${id}/liberar`, {});
+      mostrarToast(`Mesa ${numero} liberada`);
+      cargarMesas();
     } catch (err) {
       mostrarToast(err.message, true);
     }

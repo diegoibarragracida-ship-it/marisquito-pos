@@ -106,14 +106,29 @@ router.patch('/:id/transferir', verificarToken, async (req, res) => {
   }
 });
 
-// Liberar mesa (después de que caja cierra la cuenta)
-router.patch('/:id/liberar', verificarToken, async (req, res) => {
-  const mesa = await Mesa.findByIdAndUpdate(
-    req.params.id,
-    { estado: 'libre', meseroActual: null },
-    { new: true }
-  );
-  res.json(mesa);
+// Liberar mesa a mano (botón de emergencia para el admin, por si una mesa se queda
+// "atorada" — ej. cuenta ya cerrada pero la mesa nunca se puso en libre). Por seguridad,
+// SOLO libera si de verdad no hay ningún pedido abierto para esa mesa; si lo hay, avisa
+// en vez de borrar una cuenta con consumo real.
+router.patch('/:id/liberar', verificarToken, permitirRoles('admin'), async (req, res) => {
+  try {
+    const pedidoAbierto = await Pedido.findOne({ mesa: req.params.id, estadoCuenta: 'abierta' });
+    if (pedidoAbierto) {
+      return res.status(400).json({
+        error: 'Esta mesa tiene un pedido abierto con consumo. Ciérralo/cóbralo desde Caja antes de liberarla a mano.'
+      });
+    }
+
+    const mesa = await Mesa.findByIdAndUpdate(
+      req.params.id,
+      { estado: 'libre', meseroActual: null },
+      { new: true }
+    );
+    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+    res.json(mesa);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 module.exports = router;

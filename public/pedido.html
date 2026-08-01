@@ -75,6 +75,11 @@
   <div class="modal-caja">
     <h3>Agregar a la comanda</h3>
     <p style="font-size:0.85rem; opacity:0.7;" id="modal-producto-nombre"></p>
+    <div style="display:flex; align-items:center; justify-content:center; gap:18px; margin:14px 0;">
+      <button type="button" onclick="cambiarCantidadModal(-1)" style="width:44px; height:44px; border-radius:50%; border:2px solid var(--oceano); background:#fff; color:var(--oceano); font-size:1.4rem; font-weight:700; cursor:pointer; line-height:1;">−</button>
+      <span id="modal-cantidad-valor" style="font-size:1.6rem; font-weight:800; min-width:34px; text-align:center;">1</span>
+      <button type="button" onclick="cambiarCantidadModal(1)" style="width:44px; height:44px; border-radius:50%; border:2px solid var(--oceano); background:var(--oceano); color:#fff; font-size:1.4rem; font-weight:700; cursor:pointer; line-height:1;">+</button>
+    </div>
     <div id="bloque-variantes" style="display:none; margin-bottom:14px;">
       <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Elige el tamaño</label>
       <div id="variantes-opciones" class="variantes-opciones"></div>
@@ -283,11 +288,19 @@
 
   let varianteElegida = '';
   let modsElegidos = [];
+  let cantidadModal = 1;
+
+  function cambiarCantidadModal(delta) {
+    cantidadModal = Math.max(1, Math.min(20, cantidadModal + delta));
+    document.getElementById('modal-cantidad-valor').textContent = cantidadModal;
+  }
 
   function abrirModalNotas(producto) {
     productoParaAgregar = producto._id;
     varianteElegida = '';
     modsElegidos = [];
+    cantidadModal = 1;
+    document.getElementById('modal-cantidad-valor').textContent = '1';
     document.getElementById('modal-producto-nombre').textContent = producto.nombre;
     document.getElementById('modal-nota-texto').value = '';
 
@@ -351,12 +364,12 @@
       productoId: productoParaAgregar,
       nombre: producto.nombre,
       varianteNombre: varianteElegida || '',
-      cantidad: 1,
+      cantidad: cantidadModal,
       notas,
       precioUnitario
     });
 
-    mostrarToast(`${producto.nombre} agregado — te falta enviar la orden`);
+    mostrarToast(`${cantidadModal}× ${producto.nombre} agregado${cantidadModal > 1 ? 's' : ''} — te falta enviar la orden`);
     cerrarModal();
     pintarCarrito();
   }

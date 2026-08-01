@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Pedido = require('../models/Pedido');
 const Producto = require('../models/Producto');
@@ -63,81 +64,98 @@ router.post('/dividir/:pedidoId', verificarToken, permitirRoles('cajero', 'admin
 
 // Cerrar cuenta de una mesa (cobrar)
 router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  const session = await mongoose.startSession();
   try {
     const { metodoPago, propina, descuento, promocionId } = req.body; // metodoPago: efectivo | tarjeta | mixto
-    const pedido = await Pedido.findById(req.params.pedidoId).populate('items.producto');
+    let resultado;
 
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
-    if (pedido.estadoCuenta !== 'abierta') {
-      return res.status(400).json({ error: 'Esta cuenta ya fue cerrada' });
-    }
+    await session.withTransaction(async () => {
+      const pedido = await Pedido.findById(req.params.pedidoId).populate('items.producto').session(session);
 
-    const subtotal = pedido.items
-      .filter(i => i.estado !== 'cancelado')
-      .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
+      if (!pedido) throw new Error('Pedido no encontrado');
+      if (pedido.estadoCuenta !== 'abierta') throw new Error('Esta cuenta ya fue cerrada');
 
-    let descuentoPromocion = 0;
-    let promocionAplicada = null;
-    if (promocionId) {
-      const promo = await Promocion.findById(promocionId);
-      if (promo && promo.activa) {
-        descuentoPromocion = promo.tipo === 'porcentaje' ? subtotal * (promo.valor / 100) : promo.valor;
-        promocionAplicada = promo.nombre;
+      const subtotal = pedido.items
+        .filter(i => i.estado !== 'cancelado')
+        .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
+
+      let descuentoPromocion = 0;
+      let promocionAplicada = null;
+      if (promocionId) {
+        const promo = await Promocion.findById(promocionId).session(session);
+        if (promo && promo.activa) {
+          descuentoPromocion = promo.tipo === 'porcentaje' ? subtotal * (promo.valor / 100) : promo.valor;
+          promocionAplicada = promo.nombre;
+        }
       }
-    }
 
-    const total = subtotal - descuentoPromocion - (descuento || 0) + (propina || 0);
+      const total = subtotal - descuentoPromocion - (descuento || 0) + (propina || 0);
 
-    pedido.total = total;
-    pedido.estadoCuenta = 'cerrada';
-    pedido.metodoPago = metodoPago || 'efectivo';
-    await pedido.save();
+      pedido.total = total;
+      pedido.estadoCuenta = 'cerrada';
+      pedido.metodoPago = metodoPago || 'efectivo';
+      await pedido.save({ session });
 
-    // Liberar la mesa (si el pedido es "para llevar" no hay mesa que liberar)
-    if (pedido.mesa) {
-      await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null });
-    }
+      // Liberar la mesa (si el pedido es "para llevar" no hay mesa que liberar).
+      // Va en la MISMA transacción que cerrar el pedido: o pasan los dos juntos, o
+      // ninguno — así nunca se queda una mesa "colgada" (cuenta cerrada pero mesa
+      // sin liberar) si algo interrumpe la conexión a la mitad.
+      if (pedido.mesa) {
+        await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null }, { session });
+      }
 
-    res.json({ pedido, subtotal, descuentoPromocion, promocionAplicada, descuento: descuento || 0, propina: propina || 0, total, metodoPago });
+      resultado = { pedido, subtotal, descuentoPromocion, promocionAplicada, descuento: descuento || 0, propina: propina || 0, total, metodoPago };
+    });
+
+    res.json(resultado);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 // Registrar un pago parcial (para dividir cuenta de verdad, persona por persona)
 router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  const session = await mongoose.startSession();
   try {
     const { monto, metodoPago, persona } = req.body;
-    const pedido = await Pedido.findById(req.params.pedidoId).populate('items.producto');
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
-    if (pedido.estadoCuenta !== 'abierta') {
-      return res.status(400).json({ error: 'Esta cuenta ya fue cerrada' });
-    }
+    let resultado;
 
-    pedido.pagos.push({ monto, metodoPago, persona });
+    await session.withTransaction(async () => {
+      const pedido = await Pedido.findById(req.params.pedidoId).populate('items.producto').session(session);
+      if (!pedido) throw new Error('Pedido no encontrado');
+      if (pedido.estadoCuenta !== 'abierta') throw new Error('Esta cuenta ya fue cerrada');
 
-    const subtotal = pedido.items
-      .filter(i => i.estado !== 'cancelado')
-      .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
-    const totalPagado = pedido.pagos.reduce((acc, p) => acc + p.monto, 0);
-    const restante = Number((subtotal - totalPagado).toFixed(2));
+      pedido.pagos.push({ monto, metodoPago, persona });
 
-    let cuentaCerrada = false;
-    if (restante <= 0) {
-      pedido.total = totalPagado;
-      pedido.estadoCuenta = 'cerrada';
-      const metodosUsados = [...new Set(pedido.pagos.map(p => p.metodoPago))];
-      pedido.metodoPago = metodosUsados.length > 1 ? 'mixto' : (metodosUsados[0] || 'efectivo');
-      cuentaCerrada = true;
-      if (pedido.mesa) {
-        await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null });
+      const subtotal = pedido.items
+        .filter(i => i.estado !== 'cancelado')
+        .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
+      const totalPagado = pedido.pagos.reduce((acc, p) => acc + p.monto, 0);
+      const restante = Number((subtotal - totalPagado).toFixed(2));
+
+      let cuentaCerrada = false;
+      if (restante <= 0) {
+        pedido.total = totalPagado;
+        pedido.estadoCuenta = 'cerrada';
+        const metodosUsados = [...new Set(pedido.pagos.map(p => p.metodoPago))];
+        pedido.metodoPago = metodosUsados.length > 1 ? 'mixto' : (metodosUsados[0] || 'efectivo');
+        cuentaCerrada = true;
+        if (pedido.mesa) {
+          await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null }, { session });
+        }
       }
-    }
 
-    await pedido.save();
-    res.json({ pedido, subtotal, totalPagado, restante, cuentaCerrada });
+      await pedido.save({ session });
+      resultado = { pedido, subtotal, totalPagado, restante, cuentaCerrada };
+    });
+
+    res.json(resultado);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
