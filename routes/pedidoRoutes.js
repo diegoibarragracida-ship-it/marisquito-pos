@@ -4,6 +4,7 @@ const Pedido = require('../models/Pedido');
 const Mesa = require('../models/Mesa');
 const Producto = require('../models/Producto');
 const ColaImpresion = require('../models/ColaImpresion');
+const Usuario = require('../models/Usuario');
 const { descontarStockPorVenta, revertirStockPorCancelacion } = require('../controllers/inventarioController');
 const { verificarToken } = require('../middleware/auth');
 
@@ -69,7 +70,7 @@ router.get('/mesa/:mesaId/actual', verificarToken, async (req, res) => {
     const pedido = await Pedido.findOne({ mesa: req.params.mesaId, estadoCuenta: 'abierta' })
       .populate('items.producto', 'nombre precio')
       .populate('mesero', 'nombre')
-      .populate('mesa', 'numero');
+      .populate('mesa', 'numero estado');
 
     if (!pedido) return res.status(404).json({ error: 'No hay pedido abierto para esta mesa' });
 
@@ -114,7 +115,7 @@ router.get('/:pedidoId', verificarToken, async (req, res) => {
     const pedido = await Pedido.findById(req.params.pedidoId)
       .populate('items.producto', 'nombre precio categoria')
       .populate('mesero', 'nombre')
-      .populate('mesa', 'numero');
+      .populate('mesa', 'numero estado');
 
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
 
@@ -233,6 +234,7 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
       } else {
         encabezado = `PARA LLEVAR${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`;
       }
+      const meseroDoc = pedido.mesero ? await Usuario.findById(pedido.mesero).select('nombre') : null;
       const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
       for (const estacion of ['cocina', 'barra']) {
@@ -243,7 +245,8 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
           <h2>EL MARISQUITO</h2>
           <div class="centrado chico">${estacion === 'barra' ? 'Comanda de barra' : 'Comanda de cocina'} — ${hora}</div>
           <div class="linea-punteada"></div>
-          <div class="fila-print"><strong>${encabezado}</strong></div>
+          <div class="titulo-mesa-print">${encabezado}</div>
+          ${meseroDoc ? `<div class="mesero-print">Mesero: ${meseroDoc.nombre}</div>` : ''}
           ${pedido.notaGeneral ? `<div class="chico">Nota: ${pedido.notaGeneral}</div>` : ''}
           <div class="linea-punteada"></div>
           ${lineas.map(l => `

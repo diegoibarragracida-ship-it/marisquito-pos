@@ -478,6 +478,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   background: #c9a227;
   color: var(--blanco);
 }
+.btn-cuenta.btn-reabrir {
+  background: var(--oceano);
+}
 .btn-volver {
   background: var(--arena);
   color: var(--oceano);
@@ -1016,8 +1019,21 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     justify-content: space-between;
     gap: 6px;
     margin: 4px 0;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 700;
+  }
+  .zona-imprimible .titulo-mesa-print {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 900;
+    margin: 4px 0;
+    letter-spacing: 0.02em;
+  }
+  .zona-imprimible .mesero-print {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 4px;
   }
   .zona-imprimible .centrado { text-align: center; }
   .zona-imprimible .chico { font-size: 10px; font-weight: normal; }

@@ -112,7 +112,7 @@
       <h2>EL MARISQUITO</h2>
       <div class="centrado chico">Reimpresión — ${hora}</div>
       <div class="linea-punteada"></div>
-      <div class="fila-print"><strong>${paraLlevar ? `PARA LLEVAR${clienteLlevar ? ' — ' + clienteLlevar : ''}` : `MESA ${mesa}`}</strong></div>
+      <div class="titulo-mesa-print">${paraLlevar ? `PARA LLEVAR${clienteLlevar ? ' — ' + clienteLlevar : ''}` : `MESA ${mesa}`}</div>
       <div class="linea-punteada"></div>
       <div class="fila-print"><span>${item.cantidad}× ${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}</span></div>
       ${item.notas ? `<div class="chico">— ${item.notas}</div>` : ''}

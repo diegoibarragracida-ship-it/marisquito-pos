@@ -7,7 +7,7 @@
 //
 // Si quieres cambiar la hora, solo edita HORA_CORTE_AUTOMATICO más abajo.
 
-const HORA_CORTE_AUTOMATICO = 18; // 18 = 6:00pm. Usa formato 24 horas.
+const HORA_CORTE_AUTOMATICO = 21; // 21 = 9:00pm (hora de cierre del negocio). Usa formato 24 horas.
 const MINUTO_CORTE_AUTOMATICO = 0;
 
 let ultimaFechaEjecutada = null; // clave "YYYY-MM-DD" (hora México) del último corte ya generado hoy
@@ -73,7 +73,7 @@ async function generarCorteAutomatico(io) {
       <div class="fila-print"><span>Gastos del día</span><span>$${totalGastos.toFixed(2)}</span></div>
       <div class="fila-print total-print"><span>UTILIDAD BRUTA</span><span>$${(ventas.total - totalGastos).toFixed(2)}</span></div>
       <div class="linea-punteada"></div>
-      <div class="centrado chico">Corte automático de las ${HORA_CORTE_AUTOMATICO}:00 — el negocio sigue abierto</div>
+      <div class="centrado chico">Corte de cierre — ${HORA_CORTE_AUTOMATICO}:00</div>
     `;
 
     const trabajo = await ColaImpresion.create({

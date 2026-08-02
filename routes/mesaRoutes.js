@@ -82,6 +82,15 @@ router.patch('/:id/pedir-cuenta', verificarToken, async (req, res) => {
   res.json(mesa);
 });
 
+// Reabrir una mesa que ya había pedido la cuenta (ej. pidieron algo más antes de pagar).
+// El pedido nunca se cerró (eso solo pasa cuando caja cobra), así que solo hay que
+// regresar el estado de la mesa a "ocupada" para poder seguir agregando productos.
+router.patch('/:id/reabrir', verificarToken, async (req, res) => {
+  const mesa = await Mesa.findByIdAndUpdate(req.params.id, { estado: 'ocupada' }, { new: true });
+  if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+  res.json(mesa);
+});
+
 // Transferir la mesa (y su pedido) a otro mesero
 router.patch('/:id/transferir', verificarToken, async (req, res) => {
   try {

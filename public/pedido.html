@@ -61,6 +61,9 @@
         <button class="btn-volver" onclick="cargarPedido()">Actualizar</button>
         <button class="btn-cuenta" id="btn-pedir-cuenta" onclick="pedirCuenta()">Pedir cuenta</button>
       </div>
+      <div id="aviso-mesa-cuenta-pedida" style="display:none; text-align:center; font-size:0.82rem; color:#a15c00; padding:0 0 12px;">
+        🧾 Esta mesa ya pidió la cuenta
+      </div>
     </div>
   </div>
 </div>
@@ -456,6 +459,7 @@
           campoCliente.value = pedidoActual.clienteLlevar || '';
         }
       }
+      if (!esLlevar) actualizarBotonCuenta(pedidoActual.mesa.estado);
       pintarTicket();
     } catch (err) {
       mostrarToast(esLlevar ? 'No se encontró el pedido' : 'No se encontró un pedido abierto para esta mesa', true);
@@ -527,10 +531,39 @@
     }
   }
 
+  function actualizarBotonCuenta(estadoMesa) {
+    const boton = document.getElementById('btn-pedir-cuenta');
+    const aviso = document.getElementById('aviso-mesa-cuenta-pedida');
+    if (estadoMesa === 'cuenta_pedida') {
+      boton.textContent = 'Reabrir mesa';
+      boton.onclick = reabrirMesa;
+      boton.classList.add('btn-reabrir');
+      aviso.style.display = 'block';
+    } else {
+      boton.textContent = 'Pedir cuenta';
+      boton.onclick = pedirCuenta;
+      boton.classList.remove('btn-reabrir');
+      aviso.style.display = 'none';
+    }
+  }
+
   async function pedirCuenta() {
     try {
       await Api.patch(`/mesas/${mesaId}/pedir-cuenta`, {});
       mostrarToast('Cuenta pedida — la caja puede cobrar cuando quieras');
+      actualizarBotonCuenta('cuenta_pedida');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  // Por si piden algo más después de haber pedido la cuenta — regresa la mesa a
+  // "ocupada" sin perder nada (el pedido nunca se cerró, solo caja lo cierra al cobrar).
+  async function reabrirMesa() {
+    try {
+      await Api.patch(`/mesas/${mesaId}/reabrir`, {});
+      mostrarToast('Mesa reabierta — ya puedes seguir agregando productos');
+      actualizarBotonCuenta('ocupada');
     } catch (err) {
       mostrarToast(err.message, true);
     }
