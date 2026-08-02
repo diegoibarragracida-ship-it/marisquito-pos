@@ -71,7 +71,9 @@ const pedidoSchema = new mongoose.Schema({
     type: String,
     enum: ['efectivo', 'tarjeta', 'mixto', null],
     default: null
-  }
+  },
+  montoEfectivo: { type: Number, default: 0 }, // solo se usa cuando metodoPago === 'mixto'
+  montoTarjeta: { type: Number, default: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Pedido', pedidoSchema);

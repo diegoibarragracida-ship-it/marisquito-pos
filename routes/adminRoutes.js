@@ -9,6 +9,7 @@ const Mesa = require('../models/Mesa');
 const Pedido = require('../models/Pedido');
 const MovimientoInsumo = require('../models/MovimientoInsumo');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
+const { inicioDiaMexico, claveDiaMexico } = require('../utils/fechasMexico');
 
 // Configuración de subida de fotos (almacenamiento local en /uploads)
 // NOTA: en Render el disco es efímero (se borra en cada deploy). Para producción
@@ -244,8 +245,7 @@ router.patch('/usuarios/:id/password', verificarToken, permitirRoles('admin'), a
 // Resumen general para la pantalla principal del admin
 router.get('/dashboard', verificarToken, permitirRoles('admin'), async (req, res) => {
   try {
-    const inicioHoy = new Date();
-    inicioHoy.setHours(0, 0, 0, 0);
+    const inicioHoy = inicioDiaMexico();
 
     const [mesas, insumos, productos, pedidosHoyCerrados, cuentasAbiertas] = await Promise.all([
       Mesa.find(),
@@ -279,15 +279,14 @@ router.get('/dashboard', verificarToken, permitirRoles('admin'), async (req, res
 router.get('/reportes/ventas', verificarToken, permitirRoles('admin'), async (req, res) => {
   try {
     const dias = Number(req.query.dias) || 7;
-    const desde = new Date();
-    desde.setDate(desde.getDate() - dias);
-    desde.setHours(0, 0, 0, 0);
+    const desde = inicioDiaMexico();
+    desde.setUTCDate(desde.getUTCDate() - dias);
 
     const pedidos = await Pedido.find({ estadoCuenta: 'cerrada', updatedAt: { $gte: desde } });
 
     const porDia = {};
     for (const p of pedidos) {
-      const clave = p.updatedAt.toISOString().slice(0, 10);
+      const clave = claveDiaMexico(p.updatedAt);
       porDia[clave] = (porDia[clave] || 0) + (p.total || 0);
     }
 

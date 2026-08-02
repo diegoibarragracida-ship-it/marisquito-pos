@@ -526,6 +526,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   padding: 26px;
   max-width: 360px;
   width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 .modal-caja h3 { color: var(--oceano); margin-bottom: 6px; }
 .modal-caja textarea {
@@ -542,6 +544,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: flex;
   gap: 8px;
   margin-top: 18px;
+  position: sticky;
+  bottom: -26px;
+  background: var(--blanco);
+  padding: 12px 0 4px;
+  margin-bottom: -26px;
 }
 .modal-botones button { flex: 1; padding: 10px; font-weight: 600; }
 

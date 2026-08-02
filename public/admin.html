@@ -600,7 +600,7 @@
 <!-- Modal: corte del día (mismo cálculo que en Caja, solo lectura para el admin) -->
 <div class="modal-fondo" id="modal-corte-dia">
   <div class="modal-caja ancho">
-    <h3>📊 Corte del día</h3>
+    <h3 id="titulo-corte-dia">📊 Corte del día</h3>
     <div id="corte-dia-cuerpo"><div class="cargando">Calculando…</div></div>
     <div class="modal-botones">
       <button class="btn-volver" onclick="cerrarModal('modal-corte-dia')">Cerrar</button>
@@ -1283,30 +1283,43 @@
     document.getElementById(id).classList.remove('mostrar');
   }
 
-  async function abrirCorteDiaAdmin() {
+  async function abrirCorteDiaAdmin(fecha) {
     document.getElementById('modal-corte-dia').classList.add('mostrar');
     const cont = document.getElementById('corte-dia-cuerpo');
     cont.innerHTML = '<div class="cargando">Calculando…</div>';
     try {
-      const c = await Api.get('/caja/corte-dia');
+      const ruta = fecha ? `/caja/corte-dia?fecha=${fecha}` : '/caja/corte-dia';
+      const c = await Api.get(ruta);
+
+      const hoyMexico = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+      const esHoy = c.fecha === hoyMexico;
+      const fechaLegible = new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+      document.getElementById('titulo-corte-dia').textContent = esHoy ? '📊 Corte de hoy' : `📊 Corte del ${fechaLegible}`;
+
       cont.innerHTML = `
-        <div class="resumen-linea"><span>Cuentas cobradas hoy</span><span>${c.ventas.numCuentas}</span></div>
+        <div class="resumen-linea"><span>Cuentas cobradas</span><span>${c.ventas.numCuentas}</span></div>
         <div class="resumen-linea"><span>Ventas en efectivo</span><span>$${c.ventas.efectivo.toFixed(2)}</span></div>
         <div class="resumen-linea"><span>Ventas con tarjeta</span><span>$${c.ventas.tarjeta.toFixed(2)}</span></div>
-        <div class="resumen-linea"><span>Ventas mixtas</span><span>$${c.ventas.mixto.toFixed(2)}</span></div>
-        <div class="resumen-linea total-final"><span>Total vendido hoy</span><span>$${c.ventas.total.toFixed(2)}</span></div>
+        <div class="resumen-linea"><span>Ventas mixtas (sin desglosar)</span><span>$${c.ventas.mixto.toFixed(2)}</span></div>
+        <div class="resumen-linea total-final"><span>Total vendido</span><span>$${c.ventas.total.toFixed(2)}</span></div>
         <div class="linea-punteada" style="margin:10px 0;"></div>
-        <div class="resumen-linea"><span>Gastos fijos hoy</span><span>-$${c.gastos.fijos.toFixed(2)}</span></div>
-        <div class="resumen-linea"><span>Gastos variables hoy</span><span>-$${c.gastos.variables.toFixed(2)}</span></div>
-        <div class="resumen-linea total-final"><span>Utilidad bruta de hoy</span><span>$${c.utilidadBruta.toFixed(2)}</span></div>
+        <div class="resumen-linea"><span>Gastos fijos</span><span>-$${c.gastos.fijos.toFixed(2)}</span></div>
+        <div class="resumen-linea"><span>Gastos variables</span><span>-$${c.gastos.variables.toFixed(2)}</span></div>
+        <div class="resumen-linea total-final"><span>Utilidad bruta</span><span>$${c.utilidadBruta.toFixed(2)}</span></div>
         <div class="linea-punteada" style="margin:14px 0 8px;"></div>
-        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; opacity:0.7; margin-bottom:6px;">Ventas de hoy, una por una</div>
+        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; opacity:0.7; margin-bottom:6px;">Cuentas de ese día, una por una — qué se pidió y quién la atendió</div>
         ${c.detalleVentas.length === 0
-          ? '<div class="ticket-vacio">Aún no se ha cobrado ninguna cuenta hoy</div>'
+          ? '<div class="ticket-vacio">No se cobró ninguna cuenta ese día</div>'
           : c.detalleVentas.map(v => `
-            <div class="resumen-linea" style="font-size:0.82rem;">
-              <span>${new Date(v.hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · ${v.referencia} · ${v.mesero}</span>
-              <span>$${v.total.toFixed(2)}</span>
+            <div style="border-bottom:1px dashed var(--linea); padding:8px 0;">
+              <div class="resumen-linea" style="font-size:0.85rem; font-weight:600;">
+                <span>${new Date(v.hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · ${v.referencia} · ${v.mesero}</span>
+                <span>$${v.total.toFixed(2)}</span>
+              </div>
+              <div style="font-size:0.78rem; opacity:0.75; margin-top:2px;">
+                ${v.items.map(i => `${i.cantidad}× ${i.nombre}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}${i.notas ? ' — ' + i.notas : ''}`).join('<br>')}
+              </div>
+              ${v.notaGeneral ? `<div style="font-size:0.78rem; font-style:italic; opacity:0.7; margin-top:2px;">📌 ${v.notaGeneral}</div>` : ''}
             </div>
           `).join('')}
       `;
@@ -1322,12 +1335,12 @@
     cont.innerHTML = '<div class="cargando">Calculando…</div>';
     try {
       const dias = await Api.get('/caja/corte-historial?dias=30');
-      const hoyClave = new Date().toISOString().slice(0, 10);
+      const hoyClave = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
       cont.innerHTML = `
         <div style="max-height:60vh; overflow-y:auto;">
           ${dias.slice().reverse().map(d => `
-            <div class="resumen-linea" style="${d.fecha === hoyClave ? 'font-weight:700;' : ''}">
-              <span>${new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}${d.fecha === hoyClave ? ' (hoy)' : ''} · ${d.numCuentas} cta${d.numCuentas === 1 ? '' : 's'}</span>
+            <div class="resumen-linea" style="${d.fecha === hoyClave ? 'font-weight:700;' : ''} cursor:pointer;" onclick="abrirCorteDiaAdmin('${d.fecha}')">
+              <span>${new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}${d.fecha === hoyClave ? ' (hoy)' : ''} · ${d.numCuentas} cta${d.numCuentas === 1 ? '' : 's'} 🔍</span>
               <span>$${d.ventas.total.toFixed(2)} <span style="opacity:0.6; font-weight:400;">− $${(d.gastosFijos + d.gastosVariables).toFixed(2)} = $${d.utilidadBruta.toFixed(2)}</span></span>
             </div>
           `).join('')}

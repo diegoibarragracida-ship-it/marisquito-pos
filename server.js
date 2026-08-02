@@ -19,6 +19,7 @@ const reservacionRoutes = require('./routes/reservacionRoutes');
 const proveedorRoutes = require('./routes/proveedorRoutes');
 const compraRoutes = require('./routes/compraRoutes');
 const gastoRoutes = require('./routes/gastoRoutes');
+const { iniciarCorteAutomatico } = require('./utils/programadorCorte');
 
 const app = express();
 const server = http.createServer(app);
@@ -75,4 +76,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
+  iniciarCorteAutomatico(io);
 });

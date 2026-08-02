@@ -8,6 +8,7 @@ const CorteCaja = require('../models/CorteCaja');
 const Promocion = require('../models/Promocion');
 const Gasto = require('../models/Gasto');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
+const { inicioDiaMexico, claveDiaMexico } = require('../utils/fechasMexico');
 
 // Abrir turno de caja
 router.post('/turno/abrir', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
@@ -66,7 +67,7 @@ router.post('/dividir/:pedidoId', verificarToken, permitirRoles('cajero', 'admin
 router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
   const session = await mongoose.startSession();
   try {
-    const { metodoPago, propina, descuento, promocionId } = req.body; // metodoPago: efectivo | tarjeta | mixto
+    const { metodoPago, propina, descuento, promocionId, montoEfectivo, montoTarjeta } = req.body; // metodoPago: efectivo | tarjeta | mixto
     let resultado;
 
     await session.withTransaction(async () => {
@@ -90,6 +91,16 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
       }
 
       const total = subtotal - descuentoPromocion - (descuento || 0) + (propina || 0);
+
+      if (metodoPago === 'mixto') {
+        const efectivo = Number(montoEfectivo) || 0;
+        const tarjeta = Number(montoTarjeta) || 0;
+        if (Math.abs(efectivo + tarjeta - total) > 0.01) {
+          throw new Error(`El desglose (efectivo $${efectivo.toFixed(2)} + tarjeta $${tarjeta.toFixed(2)}) no cuadra con el total $${total.toFixed(2)}`);
+        }
+        pedido.montoEfectivo = efectivo;
+        pedido.montoTarjeta = tarjeta;
+      }
 
       pedido.total = total;
       pedido.estadoCuenta = 'cerrada';
@@ -141,6 +152,10 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
         pedido.estadoCuenta = 'cerrada';
         const metodosUsados = [...new Set(pedido.pagos.map(p => p.metodoPago))];
         pedido.metodoPago = metodosUsados.length > 1 ? 'mixto' : (metodosUsados[0] || 'efectivo');
+        // Suma real por método (para que el corte del día cuadre bien aunque la
+        // cuenta se haya pagado dividida entre efectivo y tarjeta).
+        pedido.montoEfectivo = pedido.pagos.filter(p => p.metodoPago === 'efectivo').reduce((a, p) => a + p.monto, 0);
+        pedido.montoTarjeta = pedido.pagos.filter(p => p.metodoPago === 'tarjeta').reduce((a, p) => a + p.monto, 0);
         cuentaCerrada = true;
         if (pedido.mesa) {
           await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null }, { session });
@@ -160,44 +175,60 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
 });
 
 // Corte del día: ventas (por método de pago) + gastos de hoy + detalle de cada venta
-// (hora y quién la cobró/atendió), para el botón de "Corte diario"
+// Corte de un día específico (por defecto hoy): ventas por método de pago + gastos +
+// el detalle completo de cada cuenta (mesero, hora, qué pidió cada mesa, notas).
+// ?fecha=YYYY-MM-DD para consultar cualquier día — así "Ventas por día" puede abrir
+// el detalle de cualquier fecha con un clic, no solo la de hoy.
 router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
   try {
-    const inicioDia = new Date();
-    inicioDia.setHours(0, 0, 0, 0);
+    const fechaBase = req.query.fecha ? new Date(req.query.fecha + 'T12:00:00') : new Date();
+    const inicioDia = inicioDiaMexico(fechaBase);
+    const finDia = new Date(inicioDia.getTime() + 24 * 3600 * 1000);
 
-    const pedidosHoy = await Pedido.find({
+    const pedidosDia = await Pedido.find({
       estadoCuenta: 'cerrada',
-      updatedAt: { $gte: inicioDia }
-    }).populate('mesero', 'nombre').populate('mesa', 'numero').sort('updatedAt');
+      updatedAt: { $gte: inicioDia, $lt: finDia }
+    }).populate('mesero', 'nombre').populate('mesa', 'numero').populate('items.producto', 'nombre').sort('updatedAt');
 
-    const ventas = { efectivo: 0, tarjeta: 0, mixto: 0, total: 0, numCuentas: pedidosHoy.length };
-    for (const p of pedidosHoy) {
+    const ventas = { efectivo: 0, tarjeta: 0, mixto: 0, total: 0, numCuentas: pedidosDia.length };
+    for (const p of pedidosDia) {
       const metodo = p.metodoPago || 'efectivo';
-      if (ventas[metodo] !== undefined) ventas[metodo] += p.total;
+      if (metodo === 'mixto') {
+        ventas.efectivo += p.montoEfectivo || 0;
+        ventas.tarjeta += p.montoTarjeta || 0;
+      } else if (ventas[metodo] !== undefined) {
+        ventas[metodo] += p.total;
+      }
       ventas.total += p.total;
     }
 
-    // Una línea por cada venta cobrada hoy, con la hora exacta y quién la levantó
-    // (el mesero que tomó la orden; si fue "para llevar" sin mesero se marca así).
-    const detalleVentas = pedidosHoy.map(p => ({
+    // Una línea por cada venta cobrada ese día, con hora, quién la levantó, qué se
+    // pidió en esa mesa/orden (para "para llevar" sin mesa se marca así) y su nota.
+    const detalleVentas = pedidosDia.map(p => ({
       hora: p.updatedAt,
       mesero: p.mesero ? p.mesero.nombre : 'Sin mesero',
       referencia: p.mesa ? `Mesa ${p.mesa.numero}` : `Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`,
       metodoPago: p.metodoPago || 'efectivo',
-      total: p.total || 0
+      total: p.total || 0,
+      notaGeneral: p.notaGeneral || '',
+      items: p.items.filter(i => i.estado !== 'cancelado').map(i => ({
+        nombre: i.producto ? i.producto.nombre : 'Producto',
+        cantidad: i.cantidad,
+        varianteNombre: i.varianteNombre || '',
+        notas: i.notas || ''
+      }))
     }));
 
-    const gastosHoy = await Gasto.find({ fecha: { $gte: inicioDia } });
-    const totalGastos = gastosHoy.reduce((acc, g) => acc + g.monto, 0);
-    const gastosFijos = gastosHoy.filter(g => g.tipo === 'fijo').reduce((acc, g) => acc + g.monto, 0);
+    const gastosDia = await Gasto.find({ fecha: { $gte: inicioDia, $lt: finDia } });
+    const totalGastos = gastosDia.reduce((acc, g) => acc + g.monto, 0);
+    const gastosFijos = gastosDia.filter(g => g.tipo === 'fijo').reduce((acc, g) => acc + g.monto, 0);
     const gastosVariables = totalGastos - gastosFijos;
 
     res.json({
-      fecha: inicioDia,
+      fecha: claveDiaMexico(inicioDia),
       ventas,
       detalleVentas,
-      gastos: { total: totalGastos, fijos: gastosFijos, variables: gastosVariables, detalle: gastosHoy },
+      gastos: { total: totalGastos, fijos: gastosFijos, variables: gastosVariables, detalle: gastosDia },
       utilidadBruta: ventas.total - totalGastos
     });
   } catch (err) {
@@ -211,9 +242,8 @@ router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async
 router.get('/corte-historial', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
   try {
     const dias = Math.min(Number(req.query.dias) || 30, 90);
-    const inicioRango = new Date();
-    inicioRango.setHours(0, 0, 0, 0);
-    inicioRango.setDate(inicioRango.getDate() - (dias - 1));
+    const inicioRango = inicioDiaMexico();
+    inicioRango.setUTCDate(inicioRango.getUTCDate() - (dias - 1));
 
     const [pedidos, gastos] = await Promise.all([
       Pedido.find({ estadoCuenta: 'cerrada', updatedAt: { $gte: inicioRango } }),
@@ -223,9 +253,8 @@ router.get('/corte-historial', verificarToken, permitirRoles('cajero', 'admin'),
     // Arma un renglón vacío para cada día del rango, del más viejo al más nuevo
     const porDia = {};
     for (let i = 0; i < dias; i++) {
-      const d = new Date(inicioRango);
-      d.setDate(d.getDate() + i);
-      const clave = d.toISOString().slice(0, 10);
+      const d = new Date(inicioRango.getTime() + i * 24 * 3600 * 1000);
+      const clave = claveDiaMexico(d);
       porDia[clave] = {
         fecha: clave,
         numCuentas: 0,
@@ -237,16 +266,21 @@ router.get('/corte-historial', verificarToken, permitirRoles('cajero', 'admin'),
     }
 
     for (const p of pedidos) {
-      const clave = p.updatedAt.toISOString().slice(0, 10);
+      const clave = claveDiaMexico(p.updatedAt);
       if (!porDia[clave]) continue;
       const metodo = p.metodoPago || 'efectivo';
       porDia[clave].numCuentas += 1;
-      if (porDia[clave].ventas[metodo] !== undefined) porDia[clave].ventas[metodo] += p.total || 0;
+      if (metodo === 'mixto') {
+        porDia[clave].ventas.efectivo += p.montoEfectivo || 0;
+        porDia[clave].ventas.tarjeta += p.montoTarjeta || 0;
+      } else if (porDia[clave].ventas[metodo] !== undefined) {
+        porDia[clave].ventas[metodo] += p.total || 0;
+      }
       porDia[clave].ventas.total += p.total || 0;
     }
 
     for (const g of gastos) {
-      const clave = new Date(g.fecha).toISOString().slice(0, 10);
+      const clave = claveDiaMexico(g.fecha);
       if (!porDia[clave]) continue;
       if (g.tipo === 'fijo') porDia[clave].gastosFijos += g.monto;
       else porDia[clave].gastosVariables += g.monto;
