@@ -38,6 +38,12 @@ const pedidoSchema = new mongoose.Schema({
     ref: 'Mesa',
     required: function () { return this.tipo === 'mesa'; }
   },
+  // Otras mesas que se unieron a esta (ej. grupo grande que ocupa 2-3 mesas juntas).
+  // "mesa" sigue siendo la principal — aquí van las que se le pegaron.
+  mesasAdicionales: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mesa'
+  }],
   clienteLlevar: {
     type: String, // nombre/referencia del cliente cuando es pedido "para llevar"
     default: ''

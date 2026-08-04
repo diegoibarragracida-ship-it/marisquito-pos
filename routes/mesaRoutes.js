@@ -140,4 +140,58 @@ router.patch('/:id/liberar', verificarToken, permitirRoles('admin'), async (req,
   }
 });
 
+// Unir una mesa libre a la mesa que ya tiene el pedido abierto (grupo grande que
+// ocupa 2-3 mesas juntas). ":id" es la mesa PRINCIPAL (la que tiene el pedido);
+// en el body va la mesa que se está pegando.
+router.patch('/:id/unir', verificarToken, async (req, res) => {
+  try {
+    const { mesaSecundariaId } = req.body;
+    if (!mesaSecundariaId) return res.status(400).json({ error: 'Falta elegir la mesa a unir' });
+    if (mesaSecundariaId === req.params.id) return res.status(400).json({ error: 'No puedes unir una mesa consigo misma' });
+
+    const pedido = await Pedido.findOne({ mesa: req.params.id, estadoCuenta: 'abierta' });
+    if (!pedido) return res.status(404).json({ error: 'Esta mesa no tiene un pedido abierto' });
+
+    const mesaSecundaria = await Mesa.findById(mesaSecundariaId);
+    if (!mesaSecundaria) return res.status(404).json({ error: 'La mesa a unir no existe' });
+    if (mesaSecundaria.estado !== 'libre') {
+      return res.status(400).json({ error: 'Solo puedes unir mesas que estén libres' });
+    }
+
+    const yaUnida = pedido.mesasAdicionales.some(m => String(m) === String(mesaSecundariaId));
+    if (yaUnida) return res.status(400).json({ error: 'Esa mesa ya está unida a esta cuenta' });
+
+    mesaSecundaria.estado = 'ocupada';
+    mesaSecundaria.meseroActual = pedido.mesero;
+    await mesaSecundaria.save();
+
+    pedido.mesasAdicionales.push(mesaSecundariaId);
+    await pedido.save();
+
+    res.json({ mensaje: 'Mesas unidas', pedido });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Separar una mesa que se había unido — la vuelve a dejar libre y la quita del pedido
+router.patch('/:id/separar', verificarToken, async (req, res) => {
+  try {
+    const { mesaSecundariaId } = req.body;
+    if (!mesaSecundariaId) return res.status(400).json({ error: 'Falta indicar qué mesa separar' });
+
+    const pedido = await Pedido.findOne({ mesa: req.params.id, estadoCuenta: 'abierta' });
+    if (!pedido) return res.status(404).json({ error: 'Esta mesa no tiene un pedido abierto' });
+
+    pedido.mesasAdicionales = pedido.mesasAdicionales.filter(m => String(m) !== String(mesaSecundariaId));
+    await pedido.save();
+
+    await Mesa.findByIdAndUpdate(mesaSecundariaId, { estado: 'libre', meseroActual: null });
+
+    res.json({ mensaje: 'Mesa separada', pedido });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

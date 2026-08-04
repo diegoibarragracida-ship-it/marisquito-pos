@@ -64,6 +64,25 @@
       <div id="aviso-mesa-cuenta-pedida" style="display:none; text-align:center; font-size:0.82rem; color:#a15c00; padding:0 0 12px;">
         🧾 Esta mesa ya pidió la cuenta
       </div>
+      <div id="bloque-unir-mesas" style="display:none; padding:0 0 12px; border-top:1px dashed var(--linea); margin-top:4px; padding-top:12px;">
+        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; opacity:0.7; margin-bottom:6px;">🔗 Mesas unidas a esta cuenta</div>
+        <div id="lista-mesas-unidas" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
+        <button class="btn-volver" style="width:100%; font-size:0.85rem;" onclick="abrirSelectorUnirMesa()">+ Unir otra mesa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Selector para elegir qué mesa libre unir -->
+  <div class="modal-fondo" id="modal-unir-mesa">
+    <div class="modal-caja">
+      <h3>Unir mesa</h3>
+      <p style="font-size:0.85rem; opacity:0.7; margin-bottom:10px;">Elige una mesa libre para juntarla a esta cuenta (ej. llegó más gente y ocuparon la de al lado).</p>
+      <div id="lista-mesas-libres" style="display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto;">
+        <div class="cargando">Cargando mesas…</div>
+      </div>
+      <div class="modal-botones">
+        <button class="btn-volver" onclick="document.getElementById('modal-unir-mesa').classList.remove('mostrar')">Cerrar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -444,10 +463,11 @@
         : await Api.get(`/pedidos/mesa/${mesaId}/actual`);
       detectarPlatillosListos(anterior, pedidoActual);
 
-      const titulo = esLlevar ? `🥡 Para llevar${pedidoActual.clienteLlevar ? ' — ' + pedidoActual.clienteLlevar : ''}` : `Mesa ${pedidoActual.mesa.numero}`;
+      const numerosMesa = esLlevar ? '' : [pedidoActual.mesa.numero, ...(pedidoActual.mesasAdicionales || []).map(m => m.numero)].sort((a, b) => a - b).join(' + ');
+      const titulo = esLlevar ? `🥡 Para llevar${pedidoActual.clienteLlevar ? ' — ' + pedidoActual.clienteLlevar : ''}` : `Mesa ${numerosMesa}`;
       document.getElementById('titulo-mesa').textContent = titulo;
-      document.getElementById('ticket-mesa-num').textContent = esLlevar ? '🥡 Para llevar' : `Mesa ${pedidoActual.mesa.numero}`;
-      document.getElementById('sub-mesa').textContent = esLlevar ? 'Para llevar' : `Mesa ${pedidoActual.mesa.numero}`;
+      document.getElementById('ticket-mesa-num').textContent = esLlevar ? '🥡 Para llevar' : `Mesa ${numerosMesa}`;
+      document.getElementById('sub-mesa').textContent = esLlevar ? 'Para llevar' : `Mesa ${numerosMesa}`;
 
       const campoNota = document.getElementById('nota-general-texto');
       if (document.activeElement !== campoNota) {
@@ -459,7 +479,10 @@
           campoCliente.value = pedidoActual.clienteLlevar || '';
         }
       }
-      if (!esLlevar) actualizarBotonCuenta(pedidoActual.mesa.estado);
+      if (!esLlevar) {
+        actualizarBotonCuenta(pedidoActual.mesa.estado);
+        pintarMesasUnidas();
+      }
       pintarTicket();
     } catch (err) {
       mostrarToast(esLlevar ? 'No se encontró el pedido' : 'No se encontró un pedido abierto para esta mesa', true);
@@ -564,6 +587,64 @@
       await Api.patch(`/mesas/${mesaId}/reabrir`, {});
       mostrarToast('Mesa reabierta — ya puedes seguir agregando productos');
       actualizarBotonCuenta('ocupada');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  function pintarMesasUnidas() {
+    const bloque = document.getElementById('bloque-unir-mesas');
+    const cont = document.getElementById('lista-mesas-unidas');
+    bloque.style.display = 'block';
+
+    const unidas = pedidoActual.mesasAdicionales || [];
+    cont.innerHTML = unidas.length === 0
+      ? '<span style="font-size:0.82rem; opacity:0.6;">Ninguna (solo esta mesa)</span>'
+      : unidas.map(m => `
+        <span style="display:flex; align-items:center; gap:4px; background:var(--arena); border-radius:100px; padding:5px 10px; font-size:0.82rem; font-weight:600;">
+          Mesa ${m.numero}
+          <button onclick="separarMesa('${m._id}')" style="background:none; border:none; color:var(--camaron); font-weight:700; cursor:pointer; padding:0;">✕</button>
+        </span>
+      `).join('');
+  }
+
+  async function abrirSelectorUnirMesa() {
+    document.getElementById('modal-unir-mesa').classList.add('mostrar');
+    const cont = document.getElementById('lista-mesas-libres');
+    cont.innerHTML = '<div class="cargando">Cargando mesas…</div>';
+    try {
+      const mesas = await Api.get('/mesas');
+      const libres = mesas.filter(m => m.estado === 'libre');
+      cont.innerHTML = libres.length === 0
+        ? '<div class="ticket-vacio">No hay ninguna mesa libre ahora mismo</div>'
+        : libres.map(m => `
+          <button class="btn-volver" style="text-align:left; padding:12px;" onclick="unirMesa('${m._id}', ${m.numero})">
+            Mesa ${m.numero} · ${m.capacidad} personas
+          </button>
+        `).join('');
+    } catch (err) {
+      cont.innerHTML = '';
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function unirMesa(mesaSecundariaId, numero) {
+    try {
+      await Api.patch(`/mesas/${mesaId}/unir`, { mesaSecundariaId });
+      mostrarToast(`Mesa ${numero} unida a esta cuenta`);
+      document.getElementById('modal-unir-mesa').classList.remove('mostrar');
+      cargarPedido();
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function separarMesa(mesaSecundariaId) {
+    if (!confirm('¿Separar esta mesa? Vuelve a quedar libre.')) return;
+    try {
+      await Api.patch(`/mesas/${mesaId}/separar`, { mesaSecundariaId });
+      mostrarToast('Mesa separada');
+      cargarPedido();
     } catch (err) {
       mostrarToast(err.message, true);
     }

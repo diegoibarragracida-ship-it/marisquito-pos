@@ -112,7 +112,8 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
       // ninguno — así nunca se queda una mesa "colgada" (cuenta cerrada pero mesa
       // sin liberar) si algo interrumpe la conexión a la mitad.
       if (pedido.mesa) {
-        await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null }, { session });
+        const idsALiberar = [pedido.mesa, ...pedido.mesasAdicionales];
+        await Mesa.updateMany({ _id: { $in: idsALiberar } }, { estado: 'libre', meseroActual: null }, { session });
       }
 
       resultado = { pedido, subtotal, descuentoPromocion, promocionAplicada, descuento: descuento || 0, propina: propina || 0, total, metodoPago };
@@ -158,7 +159,8 @@ router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin')
         pedido.montoTarjeta = pedido.pagos.filter(p => p.metodoPago === 'tarjeta').reduce((a, p) => a + p.monto, 0);
         cuentaCerrada = true;
         if (pedido.mesa) {
-          await Mesa.findByIdAndUpdate(pedido.mesa, { estado: 'libre', meseroActual: null }, { session });
+          const idsALiberar = [pedido.mesa, ...pedido.mesasAdicionales];
+          await Mesa.updateMany({ _id: { $in: idsALiberar } }, { estado: 'libre', meseroActual: null }, { session });
         }
       }
 

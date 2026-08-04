@@ -245,6 +245,13 @@
 
   let pedidosCache = [];
 
+  // "Mesa 3" normal, o "Mesa 3 + 5" si hay mesas unidas a esta cuenta
+  function textoMesasUnidas(pedido) {
+    if (!pedido.mesa) return '';
+    const numeros = [pedido.mesa.numero, ...(pedido.mesasAdicionales || []).map(m => m.numero)];
+    return numeros.sort((a, b) => a - b).join(' + ');
+  }
+
   async function cargarCuentas() {
     const cont = document.getElementById('grid-cuentas');
     try {
@@ -264,7 +271,7 @@
         const esLlevar = p.tipo === 'para_llevar';
         const encabezado = esLlevar
           ? `🥡 Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`
-          : `Mesa ${p.mesa.numero}`;
+          : `Mesa ${textoMesasUnidas(p)}`;
         return `
           <div class="cuenta-card ${esLlevar ? 'ocupada' : p.mesa.estado}">
             <div class="mesa-num">${encabezado}</div>
@@ -294,7 +301,7 @@
         <div style="display:flex; flex-direction:column; gap:6px;">
           ${esperando.map(p => `
             <button onclick='abrirCobroDesdeAviso(${JSON.stringify(p._id)})' style="background:#fff; color:#8a6d1a; border:none; border-radius:8px; padding:10px 14px; font-weight:700; text-align:left; cursor:pointer; font-size:0.9rem;">
-              Mesa ${p.mesa.numero} — toca para cobrar
+              Mesa ${textoMesasUnidas(p)} — toca para cobrar
             </button>
           `).join('')}
         </div>
@@ -329,7 +336,7 @@
     document.querySelectorAll('.metodo-pago-grupo button').forEach(b => b.classList.toggle('activo', b.dataset.metodo === 'efectivo'));
     document.getElementById('cobrar-titulo').textContent = pedido.tipo === 'para_llevar'
       ? `🥡 Para llevar${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`
-      : `Mesa ${pedido.mesa.numero}`;
+      : `Mesa ${textoMesasUnidas(pedido)}`;
     document.getElementById('input-descuento').value = 0;
     document.getElementById('input-propina').value = 0;
 
@@ -376,7 +383,7 @@
       <h2>RESTAURANTE EL MARISQUITO</h2>
       <div class="centrado chico">Poniente 6 #57, Col. Centro</div>
       <div class="centrado chico">${fecha}</div>
-      <div class="centrado chico">${pedidoEnCobro.tipo === 'para_llevar' ? `Para llevar${pedidoEnCobro.clienteLlevar ? ' — ' + pedidoEnCobro.clienteLlevar : ''}` : `Mesa ${pedidoEnCobro.mesa.numero}`}</div>
+      <div class="centrado chico">${pedidoEnCobro.tipo === 'para_llevar' ? `Para llevar${pedidoEnCobro.clienteLlevar ? ' — ' + pedidoEnCobro.clienteLlevar : ''}` : `Mesa ${textoMesasUnidas(pedidoEnCobro)}`}</div>
       <div class="centrado chico">Atendió: ${pedidoEnCobro.mesero ? pedidoEnCobro.mesero.nombre : '—'}</div>
       <div class="linea-punteada"></div>
       ${items.map(i => `

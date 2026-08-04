@@ -56,6 +56,7 @@ router.get('/', verificarToken, async (req, res) => {
       .populate('items.producto', 'nombre precio')
       .populate('mesero', 'nombre')
       .populate('mesa', 'numero estado')
+      .populate('mesasAdicionales', 'numero')
       .sort('-createdAt');
 
     res.json(pedidos);
@@ -64,13 +65,23 @@ router.get('/', verificarToken, async (req, res) => {
   }
 });
 
-// Ver el pedido abierto actual de una mesa
+// Ver el pedido abierto actual de una mesa (si la mesa es una que se unió a otra,
+// igual encuentra el pedido — está guardado bajo la mesa principal)
 router.get('/mesa/:mesaId/actual', verificarToken, async (req, res) => {
   try {
-    const pedido = await Pedido.findOne({ mesa: req.params.mesaId, estadoCuenta: 'abierta' })
+    let pedido = await Pedido.findOne({ mesa: req.params.mesaId, estadoCuenta: 'abierta' })
       .populate('items.producto', 'nombre precio')
       .populate('mesero', 'nombre')
-      .populate('mesa', 'numero estado');
+      .populate('mesa', 'numero estado')
+      .populate('mesasAdicionales', 'numero');
+
+    if (!pedido) {
+      pedido = await Pedido.findOne({ mesasAdicionales: req.params.mesaId, estadoCuenta: 'abierta' })
+        .populate('items.producto', 'nombre precio')
+        .populate('mesero', 'nombre')
+        .populate('mesa', 'numero estado')
+        .populate('mesasAdicionales', 'numero');
+    }
 
     if (!pedido) return res.status(404).json({ error: 'No hay pedido abierto para esta mesa' });
 
@@ -115,7 +126,8 @@ router.get('/:pedidoId', verificarToken, async (req, res) => {
     const pedido = await Pedido.findById(req.params.pedidoId)
       .populate('items.producto', 'nombre precio categoria')
       .populate('mesero', 'nombre')
-      .populate('mesa', 'numero estado');
+      .populate('mesa', 'numero estado')
+      .populate('mesasAdicionales', 'numero');
 
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
 
@@ -229,8 +241,10 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
     try {
       let encabezado;
       if (pedido.tipo === 'mesa') {
-        const mesaDoc = await Mesa.findById(pedido.mesa);
-        encabezado = `MESA ${mesaDoc ? mesaDoc.numero : ''}`;
+        const idsMesas = [pedido.mesa, ...pedido.mesasAdicionales];
+        const mesasDocs = await Mesa.find({ _id: { $in: idsMesas } }).select('numero');
+        const numeros = mesasDocs.map(m => m.numero).sort((a, b) => a - b);
+        encabezado = `MESA ${numeros.join(' + ')}`;
       } else {
         encabezado = `PARA LLEVAR${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`;
       }
