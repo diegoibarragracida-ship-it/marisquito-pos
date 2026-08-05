@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Caja — El Marisquito</title>
+<title>Cocina — El Marisquito</title>
 <link rel="stylesheet" href="/css/style.css">
 <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -12,133 +12,21 @@
 <div class="topbar">
   <div class="marca">
     <span class="display">El Marisquito</span>
-    <span class="sub">Caja</span>
+    <span class="sub">🍽 Cocina</span>
   </div>
   <div class="usuario" id="barra-usuario"></div>
 </div>
 
 <div class="contenedor">
-
-  <div class="turno-banda" id="turno-banda">
-    <div class="cargando">Revisando turno…</div>
-  </div>
-
-  <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
-    <button class="btn-volver" style="width:auto; padding:10px 20px; font-weight:600;" onclick="abrirCorteDia()">📊 Corte del día</button>
-  </div>
-
   <div class="encabezado-seccion">
     <div>
-      <div class="eyebrow">Salón</div>
-      <h2 class="display">Cuentas abiertas</h2>
+      <div class="eyebrow">En vivo</div>
+      <h2 class="display">Comandas de cocina</h2>
     </div>
   </div>
 
-  <div class="grid-cuentas" id="grid-cuentas">
-    <div class="cargando">Cargando cuentas…</div>
-  </div>
-</div>
-
-<!-- Modal: abrir turno -->
-<div class="modal-fondo" id="modal-abrir-turno">
-  <div class="modal-caja">
-    <h3>Abrir turno de caja</h3>
-    <div class="campo-inline" style="margin-top:14px;">
-      <label>Efectivo inicial en caja</label>
-      <input type="number" id="input-efectivo-inicial" min="0" step="0.01" value="0">
-    </div>
-    <div class="modal-botones">
-      <button class="btn-principal" onclick="abrirTurno()">Abrir turno</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: cerrar turno -->
-<div class="modal-fondo" id="modal-cerrar-turno">
-  <div class="modal-caja">
-    <h3>Cerrar turno</h3>
-    <div class="campo-inline" style="margin-top:14px;">
-      <label>Efectivo final contado</label>
-      <input type="number" id="input-efectivo-final" min="0" step="0.01">
-    </div>
-    <div class="modal-botones">
-      <button class="btn-volver" onclick="cerrarModal('modal-cerrar-turno')">Cancelar</button>
-      <button class="btn-principal" onclick="cerrarTurno()">Cerrar turno</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: corte del día -->
-<div class="modal-fondo" id="modal-corte-dia">
-  <div class="modal-caja ancho">
-    <h3>📊 Corte del día</h3>
-    <div id="corte-dia-cuerpo"><div class="cargando">Calculando…</div></div>
-    <div class="modal-botones">
-      <button class="btn-volver" onclick="cerrarModal('modal-corte-dia')">Cerrar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: cobrar cuenta -->
-<div class="modal-fondo" id="modal-cobrar">
-  <div class="modal-caja ancho">
-    <h3 id="cobrar-titulo">Mesa —</h3>
-    <div id="cobrar-resumen"></div>
-
-    <div class="campo-inline" style="margin-top:10px;">
-      <label>Promoción (opcional)</label>
-      <select id="input-promocion" onchange="recalcularCobro()">
-        <option value="">Sin promoción</option>
-      </select>
-    </div>
-    <div class="campo-inline">
-      <label>Descuento adicional ($)</label>
-      <input type="number" id="input-descuento" min="0" step="0.01" value="0" oninput="recalcularCobro()">
-    </div>
-    <div class="campo-inline">
-      <label>Propina ($)</label>
-      <input type="number" id="input-propina" min="0" step="0.01" value="0" oninput="recalcularCobro()">
-      <div class="metodo-pago-grupo" style="margin-top:8px;">
-        <button type="button" onclick="propinaSugerida(0.10)">10%</button>
-        <button type="button" onclick="propinaSugerida(0.15)">15%</button>
-        <button type="button" onclick="propinaSugerida(0.20)">20%</button>
-      </div>
-    </div>
-
-    <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:6px;">Método de pago</label>
-    <div class="metodo-pago-grupo">
-      <button type="button" class="activo" data-metodo="efectivo" onclick="elegirMetodo('efectivo')">Efectivo</button>
-      <button type="button" data-metodo="tarjeta" onclick="elegirMetodo('tarjeta')">Tarjeta</button>
-      <button type="button" data-metodo="mixto" onclick="elegirMetodo('mixto')">Mixto</button>
-    </div>
-
-    <div class="resumen-linea total-final">
-      <span>Total a cobrar</span>
-      <span id="cobrar-total-final">$0.00</span>
-    </div>
-
-    <div class="modal-botones">
-      <button class="btn-volver" onclick="cerrarModal('modal-cobrar')">Cancelar</button>
-      <button class="btn-volver" onclick="abrirDivision()">Dividir cuenta</button>
-      <button class="btn-imprimir" onclick="imprimirTicket()">🖨 Imprimir</button>
-      <button class="btn-principal" onclick="confirmarCobro()">Cobrar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: dividir cuenta -->
-<div class="modal-fondo" id="modal-dividir">
-  <div class="modal-caja">
-    <h3>Dividir cuenta</h3>
-    <div class="campo-inline" style="margin-top:14px;">
-      <label>Entre cuántas personas (partes iguales)</label>
-      <input type="number" id="input-num-personas" min="1" value="2" onchange="calcularDivision()">
-    </div>
-    <div id="resultado-division" style="margin-top:10px; font-size:0.9rem;"></div>
-    <div class="modal-botones">
-      <button class="btn-volver" onclick="cerrarModal('modal-dividir')">Cerrar</button>
-      <button class="btn-principal" onclick="calcularDivision()">Calcular</button>
-    </div>
+  <div class="grid-comandas" id="grid-comandas">
+    <div class="cargando">Cargando comandas…</div>
   </div>
 </div>
 
@@ -147,319 +35,112 @@
 <script src="/js/api.js"></script>
 <script src="/js/impresion-auto.js"></script>
 <script>
-  const usuario = exigirSesion(['cajero', 'admin']);
-  let turnoActual = null;
-  let pedidoEnCobro = null;
-  let metodoSeleccionado = 'efectivo';
-  let promosVigentesCache = [];
+  const usuario = exigirSesion(['cocina', 'admin']);
 
   if (usuario) {
     pintarBarraSuperior(usuario);
-    revisarTurno();
-    cargarCuentas();
-    iniciarImpresionAutomatica(['admin', 'barra'], { requiereToque: true }); // cuentas + comandas de barra,
-    // siempre con botón de "toca para imprimir" (ver misma nota en admin.html).
+    cargarComandas();
+    conectarTiempoReal();
+    iniciarImpresionAutomatica('cocina'); // esta pantalla solo recoge comandas de cocina
   }
 
-  function revisarTurno() {
-    const guardado = localStorage.getItem('marisquito_turno');
-    turnoActual = guardado ? JSON.parse(guardado) : null;
-    pintarTurno();
-  }
-
-  function pintarTurno() {
-    const cont = document.getElementById('turno-banda');
-    if (!turnoActual) {
-      cont.className = 'turno-banda cerrado';
-      cont.innerHTML = `
-        <div>No tienes un turno de caja abierto.</div>
-        <button class="btn-principal" style="width:auto; padding:10px 20px;" onclick="document.getElementById('modal-abrir-turno').classList.add('mostrar')">Abrir turno</button>
-      `;
-    } else {
-      cont.className = 'turno-banda abierto';
-      cont.innerHTML = `
-        <div class="info">
-          <div class="dato"><div class="valor">$${Number(turnoActual.efectivoInicial).toFixed(2)}</div><div class="etiqueta">Efectivo inicial</div></div>
-          <div class="dato"><div class="valor">Abierto</div><div class="etiqueta">Estado del turno</div></div>
-        </div>
-        <button class="btn-volver" style="width:auto; padding:10px 20px;" onclick="document.getElementById('modal-cerrar-turno').classList.add('mostrar')">Cerrar turno</button>
-      `;
-    }
-  }
-
-  async function abrirTurno() {
+  function conectarTiempoReal() {
     try {
-      const efectivoInicial = Number(document.getElementById('input-efectivo-inicial').value) || 0;
-      const turno = await Api.post('/caja/turno/abrir', { efectivoInicial });
-      turnoActual = turno;
-      localStorage.setItem('marisquito_turno', JSON.stringify(turno));
-      pintarTurno();
-      cerrarModal('modal-abrir-turno');
-      mostrarToast('Turno abierto');
+      const socket = io();
+      socket.on('nuevoItemPedido', () => cargarComandas());
+      socket.on('itemActualizado', () => cargarComandas());
     } catch (err) {
-      mostrarToast(err.message, true);
+      console.warn('Socket.io no disponible, usando solo actualización periódica');
     }
   }
 
-  async function cerrarTurno() {
+  async function cargarComandas() {
+    const cont = document.getElementById('grid-comandas');
     try {
-      const efectivoFinal = Number(document.getElementById('input-efectivo-final').value);
-      if (isNaN(efectivoFinal)) { mostrarToast('Ingresa el efectivo final', true); return; }
-      await Api.patch(`/caja/turno/${turnoActual._id}/cerrar`, { efectivoFinal });
-      localStorage.removeItem('marisquito_turno');
-      turnoActual = null;
-      pintarTurno();
-      cerrarModal('modal-cerrar-turno');
-      mostrarToast('Turno cerrado');
-    } catch (err) {
-      mostrarToast(err.message, true);
-    }
-  }
-
-  async function cargarCuentas() {
-    const cont = document.getElementById('grid-cuentas');
-    try {
-      const pedidos = await Api.get('/pedidos');
-      if (pedidos.length === 0) {
-        cont.innerHTML = '<div class="ticket-vacio">No hay cuentas abiertas por ahora</div>';
+      const comandas = await Api.get('/cocina/comandas');
+      if (comandas.length === 0) {
+        cont.innerHTML = '<div class="comanda-vacia">No hay platillos pendientes ahora mismo 🍽</div>';
         return;
       }
-      cont.innerHTML = pedidos.map(p => {
-        const total = p.items
-          .filter(i => i.estado !== 'cancelado')
-          .reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
-        const esLlevar = p.tipo === 'para_llevar';
-        const encabezado = esLlevar
-          ? `🥡 Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`
-          : `Mesa ${p.mesa.numero}`;
-        return `
-          <div class="cuenta-card ${esLlevar ? 'ocupada' : p.mesa.estado}">
-            <div class="mesa-num">${encabezado}</div>
-            <div class="mesero-nombre">Atiende: ${p.mesero ? p.mesero.nombre : '—'}</div>
-            <div class="total">$${total.toFixed(2)}</div>
-            <button onclick='abrirCobro(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Cobrar</button>
+      cont.innerHTML = comandas.map(c => `
+        <div class="comanda-card">
+          <div class="comanda-header">
+            <span class="mesa-num">${c.paraLlevar ? `🥡 Para llevar${c.clienteLlevar ? ' — ' + c.clienteLlevar : ''}` : `Mesa ${c.mesa}`}</span>
           </div>
-        `;
-      }).join('');
+          ${c.notaGeneral ? `<div style="padding:8px 16px; background:#fdf6e8; font-size:0.78rem; font-style:italic;">📌 ${c.notaGeneral}</div>` : ''}
+          ${c.items.map(item => `
+            <div class="comanda-item ${claseAvisoTiempo(item.createdAt)}">
+              <div class="nombre-item" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span><span class="cant">${item.cantidad}×</span>${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}
+                ${tiempoEsperaHtml(item.createdAt)}</span>
+                <button class="btn-imprimir" style="padding:3px 8px; font-size:0.68rem; flex-shrink:0;" title="Reimprimir SOLO este platillo (no toda la mesa)" onclick='reimprimirItem(${JSON.stringify({ mesa: c.mesa, paraLlevar: c.paraLlevar, clienteLlevar: c.clienteLlevar, item }).replace(/'/g, "&apos;")})'>🖨</button>
+              </div>
+              ${item.notas ? `<div class="nota-item">${item.notas}</div>` : ''}
+              ${item.estado === 'pendiente'
+                ? `<button class="btn-avanzar a-preparando" onclick="avanzarEstado('${c.pedidoId}', '${item._id}', 'preparando')">Empezar a preparar</button>`
+                : `<button class="btn-avanzar a-listo" onclick="avanzarEstado('${c.pedidoId}', '${item._id}', 'listo')">Marcar listo</button>`}
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
     } catch (err) {
       mostrarToast(err.message, true);
     }
   }
 
-  async function abrirCobro(pedido) {
-    pedidoEnCobro = pedido;
-    metodoSeleccionado = 'efectivo';
-    document.querySelectorAll('.metodo-pago-grupo button').forEach(b => b.classList.toggle('activo', b.dataset.metodo === 'efectivo'));
-    document.getElementById('cobrar-titulo').textContent = pedido.tipo === 'para_llevar'
-      ? `🥡 Para llevar${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`
-      : `Mesa ${pedido.mesa.numero}`;
-    document.getElementById('input-descuento').value = 0;
-    document.getElementById('input-propina').value = 0;
-
-    try {
-      const promos = await Api.get('/promociones/vigentes');
-      promosVigentesCache = promos;
-      const select = document.getElementById('input-promocion');
-      select.innerHTML = '<option value="">Sin promoción</option>' + promos.map(p => `
-        <option value="${p._id}">${p.nombre} (${p.tipo === 'porcentaje' ? p.valor + '%' : '$' + p.valor})</option>
-      `).join('');
-    } catch (err) { /* si falla, simplemente no hay promociones para elegir */ }
-
-    const cont = document.getElementById('cobrar-resumen');
-    const items = pedido.items.filter(i => i.estado !== 'cancelado');
-    cont.innerHTML = (pedido.notaGeneral ? `<div class="nota-general-caja" style="margin-bottom:10px;">📌 ${pedido.notaGeneral}</div>` : '') + items.map(i => `
-      <div class="resumen-linea">
-        <span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}</span>
-        <span>$${(i.producto ? i.precioUnitario * i.cantidad : 0).toFixed(2)}</span>
-      </div>
-    `).join('');
-
-    recalcularCobro();
-    document.getElementById('modal-cobrar').classList.add('mostrar');
+  function tiempoEsperaHtml(creadoEn) {
+    if (!creadoEn) return '';
+    const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
+    const tardado = minutos >= 10;
+    return `<span class="tiempo-espera ${tardado ? 'tardado' : ''}">${minutos} min</span>`;
   }
 
-  function propinaSugerida(porcentaje) {
-    if (!pedidoEnCobro) return;
-    const subtotal = subtotalPedido(pedidoEnCobro);
-    document.getElementById('input-propina').value = (subtotal * porcentaje).toFixed(2);
-    recalcularCobro();
+  // Naranja parpadeante a partir de 15 min sin empezar/terminar, rojo parpadeante a partir de 30.
+  function claseAvisoTiempo(creadoEn) {
+    if (!creadoEn) return '';
+    const minutos = Math.floor((Date.now() - new Date(creadoEn).getTime()) / 60000);
+    if (minutos >= 30) return 'aviso-30';
+    if (minutos >= 15) return 'aviso-15';
+    return '';
   }
 
-  async function imprimirTicket() {
-    if (!pedidoEnCobro) return;
-    const subtotal = subtotalPedido(pedidoEnCobro);
-    const descuento = Number(document.getElementById('input-descuento').value) || 0;
-    const propina = Number(document.getElementById('input-propina').value) || 0;
-    const total = subtotal - descuento + propina;
-    const items = pedidoEnCobro.items.filter(i => i.estado !== 'cancelado');
-    const fecha = new Date().toLocaleString('es-MX');
-
+  // Reimprime SOLO un platillo (no toda la comanda de la mesa).
+  async function reimprimirItem(datos) {
+    const { mesa, paraLlevar, clienteLlevar, item } = datos;
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     const html = `
       <h2>EL MARISQUITO</h2>
-      <div class="centrado chico">${fecha}</div>
-      <div class="centrado chico">${pedidoEnCobro.tipo === 'para_llevar' ? `Para llevar${pedidoEnCobro.clienteLlevar ? ' — ' + pedidoEnCobro.clienteLlevar : ''}` : `Mesa ${pedidoEnCobro.mesa.numero}`}</div>
+      <div class="centrado chico">Reimpresión — ${hora}</div>
       <div class="linea-punteada"></div>
-      ${items.map(i => `
-        <div class="fila-print"><span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}</span><span>$${(i.producto ? i.precioUnitario * i.cantidad : 0).toFixed(2)}</span></div>
-      `).join('')}
+      <div class="titulo-mesa-print">${paraLlevar ? `PARA LLEVAR${clienteLlevar ? ' — ' + clienteLlevar : ''}` : `MESA ${mesa}`}</div>
       <div class="linea-punteada"></div>
-      <div class="fila-print"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
-      ${descuento > 0 ? `<div class="fila-print"><span>Descuento</span><span>-$${descuento.toFixed(2)}</span></div>` : ''}
-      ${propina > 0 ? `<div class="fila-print"><span>Propina</span><span>$${propina.toFixed(2)}</span></div>` : ''}
-      <div class="fila-print total-print"><span>TOTAL</span><span>$${total.toFixed(2)}</span></div>
+      <div class="fila-print"><span>${item.cantidad}× ${item.producto ? item.producto.nombre : 'Producto'}${item.varianteNombre ? ' (' + item.varianteNombre + ')' : ''}</span></div>
+      ${item.notas ? `<div class="chico">— ${item.notas}</div>` : ''}
       <div class="linea-punteada"></div>
-      <div class="centrado chico">¡Gracias por su visita!</div>
     `;
 
     try {
-      // 'admin' -> la cuenta se imprime sola en la consola de Admin o en la de Caja,
-      // cualquiera de las 2 que esté abierta (comparten la misma cola de impresión).
-      await Api.post('/impresion', { tipo: 'ticket', html, estacion: 'admin' });
-      mostrarToast('Ticket enviado a la impresora');
+      await Api.post('/impresion', { tipo: 'comanda', html, estacion: 'cocina' });
+      mostrarToast('Platillo reenviado a la impresora');
     } catch (err) {
       mostrarToast(err.message, true);
     }
   }
 
-  function subtotalPedido(pedido) {
-    return pedido.items
-      .filter(i => i.estado !== 'cancelado')
-      .reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
-  }
-
-  function calcularDescuentoPromocion(subtotal) {
-    const promoId = document.getElementById('input-promocion').value;
-    if (!promoId) return 0;
-    const promo = promosVigentesCache.find(p => p._id === promoId);
-    if (!promo) return 0;
-    return promo.tipo === 'porcentaje' ? subtotal * (promo.valor / 100) : promo.valor;
-  }
-
-  function recalcularCobro() {
-    if (!pedidoEnCobro) return;
-    const subtotal = subtotalPedido(pedidoEnCobro);
-    const descuentoPromo = calcularDescuentoPromocion(subtotal);
-    const descuento = Number(document.getElementById('input-descuento').value) || 0;
-    const propina = Number(document.getElementById('input-propina').value) || 0;
-    const total = subtotal - descuentoPromo - descuento + propina;
-    document.getElementById('cobrar-total-final').textContent = `$${total.toFixed(2)}`;
-  }
-
-  function elegirMetodo(metodo) {
-    metodoSeleccionado = metodo;
-    document.querySelectorAll('.metodo-pago-grupo button').forEach(b => b.classList.toggle('activo', b.dataset.metodo === metodo));
-  }
-
-  async function confirmarCobro() {
-    if (!pedidoEnCobro) return;
+  async function avanzarEstado(pedidoId, itemId, nuevoEstado) {
     try {
-      const descuento = Number(document.getElementById('input-descuento').value) || 0;
-      const propina = Number(document.getElementById('input-propina').value) || 0;
-      const promocionId = document.getElementById('input-promocion').value || null;
-      await Api.post(`/caja/cobrar/${pedidoEnCobro._id}`, { metodoPago: metodoSeleccionado, propina, descuento, promocionId });
-      mostrarToast('Cuenta cobrada y mesa liberada');
-      cerrarModal('modal-cobrar');
-      cargarCuentas();
-      // Aprovechamos este mismo clic (que el cajero de todos modos da en cada venta) para
-      // imprimir lo que esté pendiente, en vez de pedirle que toque el aviso rojo aparte.
-      if (window.aprovecharClicParaImprimir) window.aprovecharClicParaImprimir();
-    } catch (err) {
-      mostrarToast(err.message, true);
-    }
-  }
-
-  function abrirDivision() {
-    document.getElementById('resultado-division').innerHTML = '';
-    document.getElementById('modal-dividir').classList.add('mostrar');
-    calcularDivision();
-  }
-
-  async function calcularDivision() {
-    if (!pedidoEnCobro) return;
-    try {
-      const numPersonas = Number(document.getElementById('input-num-personas').value) || 1;
-      const resultado = await Api.post(`/caja/dividir/${pedidoEnCobro._id}`, { modo: 'partes_iguales', numPersonas });
-
-      // Trae el pedido actualizado para saber cuánto ya se ha pagado
-      const pedidoFresco = await Api.get(`/pedidos/${pedidoEnCobro._id}`);
-      const totalPagado = (pedidoFresco.pagos || []).reduce((acc, p) => acc + p.monto, 0);
-      const restante = Math.max(0, resultado.subtotal - totalPagado);
-
-      let filas = '';
-      for (let i = 1; i <= numPersonas; i++) {
-        filas += `
-          <div class="resumen-linea">
-            <span>Persona ${i} — $${resultado.montoPorPersona.toFixed(2)}</span>
-            <button class="btn-mini-toggle" style="padding:5px 10px; font-size:0.75rem;" onclick="pagarParte(${resultado.montoPorPersona}, 'Persona ${i}')">Registrar pago</button>
-          </div>
-        `;
+      await Api.patch(`/cocina/pedidos/${pedidoId}/items/${itemId}/estado`, { estado: nuevoEstado });
+      cargarComandas();
+      if (nuevoEstado === 'preparando' && window.aprovecharClicParaImprimir) {
+        window.aprovecharClicParaImprimir();
       }
-
-      document.getElementById('resultado-division').innerHTML = `
-        <div class="resumen-linea"><span>Subtotal</span><span>$${resultado.subtotal.toFixed(2)}</span></div>
-        <div class="resumen-linea"><span>Ya pagado</span><span>$${totalPagado.toFixed(2)}</span></div>
-        <div class="resumen-linea total-final"><span>Falta</span><span>$${restante.toFixed(2)}</span></div>
-        <div style="margin-top:10px;">${filas}</div>
-      `;
     } catch (err) {
       mostrarToast(err.message, true);
     }
   }
 
-  async function pagarParte(monto, persona) {
-    if (!pedidoEnCobro) return;
-    try {
-      const resultado = await Api.post(`/caja/pagos/${pedidoEnCobro._id}`, { monto, metodoPago: metodoSeleccionado, persona });
-      if (resultado.cuentaCerrada) {
-        mostrarToast('¡Cuenta completada! Mesa liberada 🎉');
-        cerrarModal('modal-dividir');
-        cerrarModal('modal-cobrar');
-        cargarCuentas();
-      } else {
-        mostrarToast(`Pago de ${persona} registrado — falta $${resultado.restante.toFixed(2)}`);
-        calcularDivision();
-      }
-      // Mismo truco que en "Cobrar": aprovechamos este clic para imprimir lo pendiente.
-      if (window.aprovecharClicParaImprimir) window.aprovecharClicParaImprimir();
-    } catch (err) {
-      mostrarToast(err.message, true);
-    }
-  }
-
-  async function abrirCorteDia() {
-    document.getElementById('modal-corte-dia').classList.add('mostrar');
-    const cont = document.getElementById('corte-dia-cuerpo');
-    cont.innerHTML = '<div class="cargando">Calculando…</div>';
-    try {
-      const c = await Api.get('/caja/corte-dia');
-      const efectivoInicial = turnoActual ? Number(turnoActual.efectivoInicial) : 0;
-      const efectivoEsperado = efectivoInicial + c.ventas.efectivo;
-      cont.innerHTML = `
-        <div class="resumen-linea"><span>Cuentas cobradas hoy</span><span>${c.ventas.numCuentas}</span></div>
-        <div class="resumen-linea"><span>Ventas en efectivo</span><span>$${c.ventas.efectivo.toFixed(2)}</span></div>
-        <div class="resumen-linea"><span>Ventas con tarjeta</span><span>$${c.ventas.tarjeta.toFixed(2)}</span></div>
-        <div class="resumen-linea"><span>Ventas mixtas</span><span>$${c.ventas.mixto.toFixed(2)}</span></div>
-        <div class="resumen-linea total-final"><span>Total vendido hoy</span><span>$${c.ventas.total.toFixed(2)}</span></div>
-        <div class="linea-punteada" style="margin:10px 0;"></div>
-        <div class="resumen-linea"><span>Gastos registrados hoy</span><span>-$${c.gastos.total.toFixed(2)}</span></div>
-        <div class="resumen-linea total-final"><span>Utilidad bruta de hoy</span><span>$${c.utilidadBruta.toFixed(2)}</span></div>
-        ${turnoActual ? `
-          <div class="linea-punteada" style="margin:10px 0;"></div>
-          <div class="resumen-linea"><span>Efectivo inicial del turno</span><span>$${efectivoInicial.toFixed(2)}</span></div>
-          <div class="resumen-linea total-final"><span>Efectivo esperado en caja</span><span>$${efectivoEsperado.toFixed(2)}</span></div>
-        ` : '<div class="ticket-vacio" style="margin-top:10px;">No tienes un turno abierto, así que no se puede calcular el efectivo esperado en caja.</div>'}
-      `;
-    } catch (err) {
-      cont.innerHTML = '';
-      mostrarToast(err.message, true);
-    }
-  }
-
-  function cerrarModal(id) {
-    document.getElementById(id).classList.remove('mostrar');
-  }
-
-  setInterval(cargarCuentas, 8000);
+  // Respaldo por si el socket no conecta, y para refrescar el cronómetro
+  setInterval(cargarComandas, 6000);
 </script>
 </body>
 </html>
