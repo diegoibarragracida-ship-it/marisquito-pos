@@ -386,6 +386,25 @@ router.get('/reporte-elgen', verificarToken, permitirRoles('cajero', 'admin'), a
       vendidoPorInsumo[clave] = (vendidoPorInsumo[clave] || 0) + m.cantidad;
     }
 
+    // Si un insumo nunca aparece en ninguna receta, nunca se le va a descontar
+    // nada al vender (por más que sí se venda el platillo) -- avisamos esto en
+    // el reporte para que se note la causa real, en vez de solo ver "0" sin explicación.
+    const idsInsumos = insumos.map(i => i._id);
+    const productosConReceta = await Producto.find({
+      $or: [
+        { 'receta.insumo': { $in: idsInsumos } },
+        { 'variantes.receta.insumo': { $in: idsInsumos } }
+      ]
+    }).select('receta.insumo variantes.receta.insumo');
+
+    const insumosConReceta = new Set();
+    for (const p of productosConReceta) {
+      for (const r of (p.receta || [])) insumosConReceta.add(String(r.insumo));
+      for (const v of (p.variantes || [])) {
+        for (const r of (v.receta || [])) insumosConReceta.add(String(r.insumo));
+      }
+    }
+
     const resultado = insumos.map(i => {
       const gramosStock = i.unidad === 'kg' ? i.stockActual * 1000 : i.stockActual;
       const gramosVendidoHoy = i.unidad === 'kg' ? (vendidoPorInsumo[String(i._id)] || 0) * 1000 : (vendidoPorInsumo[String(i._id)] || 0);
@@ -397,7 +416,8 @@ router.get('/reporte-elgen', verificarToken, permitirRoles('cajero', 'admin'), a
         vendidoHoy: vendidoPorInsumo[String(i._id)] || 0,
         pesoPorPieza: i.pesoPorPieza || null,
         piezasQuedan: i.pesoPorPieza ? Math.floor(gramosStock / i.pesoPorPieza) : null,
-        piezasVendidasHoy: i.pesoPorPieza ? Math.floor(gramosVendidoHoy / i.pesoPorPieza) : null
+        piezasVendidasHoy: i.pesoPorPieza ? Math.floor(gramosVendidoHoy / i.pesoPorPieza) : null,
+        sinReceta: !insumosConReceta.has(String(i._id))
       };
     });
 
