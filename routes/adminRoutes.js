@@ -51,9 +51,25 @@ router.post('/insumos', verificarToken, permitirRoles('admin'), async (req, res)
   }
 });
 
-// Entrada de mercancía (aumentar stock, ej. llegó compra de camarón)
-router.patch('/insumos/:id/entrada', verificarToken, permitirRoles('admin'), async (req, res) => {
+// Guardar cuánto pesa una pieza de este insumo (ej. una arrachera = 400g), para que los
+// reportes (Reporte Elgen, Stock crítico) puedan mostrar piezas además de gramos/kg.
+router.patch('/insumos/:id/peso-pieza', verificarToken, permitirRoles('admin'), async (req, res) => {
   try {
+    const { pesoPorPieza } = req.body;
+    const insumo = await Insumo.findByIdAndUpdate(
+      req.params.id,
+      { pesoPorPieza: pesoPorPieza || null },
+      { new: true }
+    );
+    if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
+    res.json(insumo);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Entrada de mercancía (aumentar stock, ej. llegó compra de camarón)
+router.patch('/insumos/:id/entrada', verificarToken, permitirRoles('admin'), async (req, res) => {  try {
     const { cantidad } = req.body;
     const insumo = await Insumo.findById(req.params.id);
     if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
@@ -429,13 +445,20 @@ router.get('/reportes/stock-critico', verificarToken, permitirRoles('admin'), as
       vendidoPorInsumo[clave] = (vendidoPorInsumo[clave] || 0) + m.cantidad;
     }
 
-    const resultado = insumos.map(i => ({
-      _id: i._id,
-      nombre: i.nombre,
-      unidad: i.unidad,
-      stockActual: i.stockActual,
-      vendidoHoy: vendidoPorInsumo[String(i._id)] || 0
-    }));
+    const resultado = insumos.map(i => {
+      const gramosStock = i.unidad === 'kg' ? i.stockActual * 1000 : i.stockActual;
+      const gramosVendidoHoy = i.unidad === 'kg' ? (vendidoPorInsumo[String(i._id)] || 0) * 1000 : (vendidoPorInsumo[String(i._id)] || 0);
+      return {
+        _id: i._id,
+        nombre: i.nombre,
+        unidad: i.unidad,
+        stockActual: i.stockActual,
+        vendidoHoy: vendidoPorInsumo[String(i._id)] || 0,
+        pesoPorPieza: i.pesoPorPieza || null,
+        piezasQuedan: i.pesoPorPieza ? Math.floor(gramosStock / i.pesoPorPieza) : null,
+        piezasVendidasHoy: i.pesoPorPieza ? Math.floor(gramosVendidoHoy / i.pesoPorPieza) : null
+      };
+    });
 
     res.json(resultado);
   } catch (err) {

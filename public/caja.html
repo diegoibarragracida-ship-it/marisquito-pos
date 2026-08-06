@@ -836,6 +836,13 @@
     }
   }
 
+  // Si el insumo tiene "peso por pieza" configurado en Admin, muestra piezas + el peso;
+  // si no, muestra solo el número tal cual (gramos, kg, lo que sea su unidad).
+  function textoCantidadInsumo(insumo, cantidad, piezas) {
+    if (piezas === null || piezas === undefined) return `${cantidad} ${insumo.unidad}`;
+    return `${piezas} pza${piezas === 1 ? '' : 's'} (${cantidad} ${insumo.unidad})`;
+  }
+
   async function abrirReporteElgen() {
     document.getElementById('modal-reporte-elgen').classList.add('mostrar');
     const cont = document.getElementById('lista-reporte-elgen');
@@ -854,8 +861,8 @@
             ${datos.map(i => `
               <tr>
                 <td>${i.nombre}</td>
-                <td>${i.stockActual} ${i.unidad}</td>
-                <td>${i.vendidoHoy} ${i.unidad}</td>
+                <td>${textoCantidadInsumo(i, i.stockActual, i.piezasQuedan)}</td>
+                <td>${textoCantidadInsumo(i, i.vendidoHoy, i.piezasVendidasHoy)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -881,8 +888,8 @@
       <div class="linea-punteada"></div>
       ${datos.map(i => `
         <div class="chico" style="font-weight:700; margin-top:4px;">${i.nombre}</div>
-        <div class="fila-print"><span>Quedan</span><span>${i.stockActual} ${i.unidad}</span></div>
-        <div class="fila-print"><span>Vendidos hoy</span><span>${i.vendidoHoy} ${i.unidad}</span></div>
+        <div class="fila-print"><span>Quedan</span><span>${textoCantidadInsumo(i, i.stockActual, i.piezasQuedan)}</span></div>
+        <div class="fila-print"><span>Vendidos hoy</span><span>${textoCantidadInsumo(i, i.vendidoHoy, i.piezasVendidasHoy)}</span></div>
       `).join('')}
       <div class="linea-punteada"></div>
     `;

@@ -25,6 +25,10 @@ const insumoSchema = new mongoose.Schema({
   costoUnitario: {
     type: Number, // costo por unidad (ej. por gramo) para reportes de margen
     default: 0
+  },
+  pesoPorPieza: {
+    type: Number, // gramos que pesa UNA pieza (ej. una arrachera = 400g). Opcional.
+    default: null // si no se llena, los reportes solo muestran gramos/kg, sin piezas
   }
 }, { timestamps: true });
 

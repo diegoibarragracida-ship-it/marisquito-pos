@@ -386,13 +386,20 @@ router.get('/reporte-elgen', verificarToken, permitirRoles('cajero', 'admin'), a
       vendidoPorInsumo[clave] = (vendidoPorInsumo[clave] || 0) + m.cantidad;
     }
 
-    const resultado = insumos.map(i => ({
-      _id: i._id,
-      nombre: i.nombre,
-      unidad: i.unidad,
-      stockActual: i.stockActual,
-      vendidoHoy: vendidoPorInsumo[String(i._id)] || 0
-    }));
+    const resultado = insumos.map(i => {
+      const gramosStock = i.unidad === 'kg' ? i.stockActual * 1000 : i.stockActual;
+      const gramosVendidoHoy = i.unidad === 'kg' ? (vendidoPorInsumo[String(i._id)] || 0) * 1000 : (vendidoPorInsumo[String(i._id)] || 0);
+      return {
+        _id: i._id,
+        nombre: i.nombre,
+        unidad: i.unidad,
+        stockActual: i.stockActual,
+        vendidoHoy: vendidoPorInsumo[String(i._id)] || 0,
+        pesoPorPieza: i.pesoPorPieza || null,
+        piezasQuedan: i.pesoPorPieza ? Math.floor(gramosStock / i.pesoPorPieza) : null,
+        piezasVendidasHoy: i.pesoPorPieza ? Math.floor(gramosVendidoHoy / i.pesoPorPieza) : null
+      };
+    });
 
     res.json(resultado);
   } catch (err) {
