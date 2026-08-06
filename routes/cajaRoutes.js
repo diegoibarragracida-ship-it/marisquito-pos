@@ -8,6 +8,8 @@ const CorteCaja = require('../models/CorteCaja');
 const Promocion = require('../models/Promocion');
 const Gasto = require('../models/Gasto');
 const Factura = require('../models/Factura');
+const Insumo = require('../models/Insumo');
+const MovimientoInsumo = require('../models/MovimientoInsumo');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
 const { inicioDiaMexico, claveDiaMexico } = require('../utils/fechasMexico');
 
@@ -357,6 +359,42 @@ router.get('/facturas', verificarToken, permitirRoles('cajero', 'admin'), async 
   try {
     const facturas = await Factura.find().populate('solicitadaPor', 'nombre').sort('-createdAt');
     res.json(facturas);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// "Reporte Elgen": siempre los mismos insumos fijos (filete de res, arrachera, milanesa
+// de pollo, milanesa de res, mojarra) — cuánto queda y cuánto se vendió hoy. No hay que
+// elegir ni configurar nada, a diferencia del "Stock crítico" de Admin (ese sí es configurable).
+router.get('/reporte-elgen', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  try {
+    const palabrasClave = ['filete de res', 'arrachera', 'milanesa de pollo', 'milanesa de res', 'mojarra'];
+    const regex = new RegExp(palabrasClave.join('|'), 'i');
+    const insumos = await Insumo.find({ nombre: regex }).sort('nombre');
+
+    const inicioHoy = inicioDiaMexico();
+    const movimientosHoy = await MovimientoInsumo.find({
+      tipo: 'venta',
+      insumo: { $in: insumos.map(i => i._id) },
+      createdAt: { $gte: inicioHoy }
+    });
+
+    const vendidoPorInsumo = {};
+    for (const m of movimientosHoy) {
+      const clave = String(m.insumo);
+      vendidoPorInsumo[clave] = (vendidoPorInsumo[clave] || 0) + m.cantidad;
+    }
+
+    const resultado = insumos.map(i => ({
+      _id: i._id,
+      nombre: i.nombre,
+      unidad: i.unidad,
+      stockActual: i.stockActual,
+      vendidoHoy: vendidoPorInsumo[String(i._id)] || 0
+    }));
+
+    res.json(resultado);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
