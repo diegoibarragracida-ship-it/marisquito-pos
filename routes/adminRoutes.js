@@ -317,8 +317,8 @@ router.get('/reportes/top-productos', verificarToken, permitirRoles('admin'), as
       }
     }
 
-    const top = Object.values(conteo).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
-    res.json(top);
+    const top = Object.values(conteo).sort((a, b) => b.cantidad - a.cantidad);
+    res.json(req.query.todos ? top : top.slice(0, 10));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -407,7 +407,53 @@ router.get('/reportes/mermas', verificarToken, permitirRoles('admin'), async (re
   }
 });
 
-// Utilidad neta del periodo: ventas - gastos - compras
+// Stock crítico del día: para los insumos que elijas (ej. arrachera, milanesa de pollo,
+// milanesa de res, mojarra), cuánto queda AHORA y cuánto se ha vendido HOY.
+// ?insumos=id1,id2,id3 (si no se manda, regresa todos los insumos).
+router.get('/reportes/stock-critico', verificarToken, permitirRoles('admin'), async (req, res) => {
+  try {
+    const idsQuery = req.query.insumos ? String(req.query.insumos).split(',').filter(Boolean) : null;
+    const filtroInsumo = idsQuery ? { _id: { $in: idsQuery } } : {};
+    const insumos = await Insumo.find(filtroInsumo).sort('nombre');
+
+    const inicioHoy = inicioDiaMexico();
+    const movimientosHoy = await MovimientoInsumo.find({
+      tipo: 'venta',
+      insumo: { $in: insumos.map(i => i._id) },
+      createdAt: { $gte: inicioHoy }
+    });
+
+    const vendidoPorInsumo = {};
+    for (const m of movimientosHoy) {
+      const clave = String(m.insumo);
+      vendidoPorInsumo[clave] = (vendidoPorInsumo[clave] || 0) + m.cantidad;
+    }
+
+    const resultado = insumos.map(i => ({
+      _id: i._id,
+      nombre: i.nombre,
+      unidad: i.unidad,
+      stockActual: i.stockActual,
+      vendidoHoy: vendidoPorInsumo[String(i._id)] || 0
+    }));
+
+    res.json(resultado);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Todos los insumos (para elegir cuáles trackear en el reporte de stock crítico)
+router.get('/reportes/insumos-disponibles', verificarToken, permitirRoles('admin'), async (req, res) => {
+  try {
+    const insumos = await Insumo.find().select('nombre unidad').sort('nombre');
+    res.json(insumos);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+
 router.get('/reportes/utilidad', verificarToken, permitirRoles('admin'), async (req, res) => {
   try {
     const Gasto = require('../models/Gasto');

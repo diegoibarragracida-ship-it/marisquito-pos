@@ -72,6 +72,9 @@
         (o con la impresora Bluetooth ya emparejada si usas RawBT en Android).
       </p>
       <button class="btn-crear" onclick="window.open('/impresora.html', 'marisquito_impresion')">Ver centro de impresión (historial / reimprimir)</button>
+      <div id="bloque-pausa-impresion" style="margin-top:12px; padding-top:12px; border-top:1px solid #eee;">
+        <div class="cargando">Revisando estado…</div>
+      </div>
     </div>
   </div>
 
@@ -220,6 +223,7 @@
     <div class="categoria-tabs">
       <button class="categoria-tab activa" data-subpanel="sub-insumos" onclick="cambiarSubTab('inventario', 'sub-insumos')">Insumos</button>
       <button class="categoria-tab" data-subpanel="sub-recetas" onclick="cambiarSubTab('inventario', 'sub-recetas')">Recetas</button>
+      <button class="categoria-tab" data-subpanel="sub-stock-critico" onclick="cambiarSubTab('inventario', 'sub-stock-critico')">Stock crítico</button>
     </div>
 
     <!-- Sub: Insumos -->
@@ -277,6 +281,30 @@
         <div id="receta-lineas"></div>
         <button type="button" class="btn-agregar-linea" onclick="agregarLineaReceta()">+ Agregar insumo a la receta</button>
         <button type="button" class="btn-crear" onclick="guardarReceta()">Guardar receta</button>
+      </div>
+    </div>
+    <!-- Sub: Stock crítico -->
+    <div class="sub-panel" id="sub-stock-critico">
+      <p style="font-size:0.85rem; opacity:0.65; margin-bottom:16px;">
+        Elige los insumos que quieres vigilar de cerca (ej. arrachera, milanesa de pollo, milanesa de res, mojarra).
+        Se guarda tu selección en este navegador. Abajo ves cuánto queda ahora mismo y cuánto se ha vendido hoy,
+        y puedes mandarlo a imprimir en la impresora térmica.
+      </p>
+      <div class="tarjeta-form" style="max-width:520px;">
+        <h3>¿Qué insumos vigilar?</h3>
+        <div id="checklist-insumos-criticos" style="max-height:260px; overflow-y:auto; margin-bottom:10px;">
+          <div class="cargando">Cargando insumos…</div>
+        </div>
+        <button type="button" class="btn-crear" onclick="guardarSeleccionStockCritico()">Guardar selección</button>
+      </div>
+
+      <div class="subseccion-titulo" style="margin-top:22px;">Stock ahora mismo</div>
+      <div style="display:flex; gap:10px; margin-bottom:12px;">
+        <button class="btn-volver" style="width:auto; padding:8px 16px; font-size:0.8rem;" onclick="cargarStockCritico()">🔄 Actualizar</button>
+        <button class="btn-imprimir" style="width:auto; padding:8px 16px; font-size:0.8rem;" onclick="imprimirStockCritico()">🖨 Imprimir reporte</button>
+      </div>
+      <div class="tabla-reporte" id="tabla-stock-critico">
+        <div class="cargando">Elige insumos arriba y guarda la selección…</div>
       </div>
     </div>
   </div>
@@ -572,7 +600,10 @@
       <div class="cargando">Cargando…</div>
     </div>
 
-    <div class="subseccion-titulo">Productos más vendidos</div>
+    <div class="subseccion-titulo" style="display:flex; align-items:center; justify-content:space-between;">
+      <span>Productos vendidos</span>
+      <button type="button" class="btn-mini-toggle" id="btn-toggle-top-productos" onclick="toggleTopProductos()" style="font-size:0.72rem;">Ver todos</button>
+    </div>
     <div class="tabla-reporte" id="tabla-top-productos">
       <div class="cargando">Cargando…</div>
     </div>
@@ -604,6 +635,7 @@
     <div id="corte-dia-cuerpo"><div class="cargando">Calculando…</div></div>
     <div class="modal-botones">
       <button class="btn-volver" onclick="cerrarModal('modal-corte-dia')">Cerrar</button>
+      <button class="btn-imprimir" onclick="imprimirReporteDelDia()">🖨 Imprimir reporte</button>
     </div>
   </div>
 </div>
@@ -676,6 +708,7 @@
   if (usuario) {
     pintarBarraSuperior(usuario);
     cargarDashboard();
+    cargarEstadoPausaImpresion();
     cargarMesas();
     cargarCategorias();
     cargarInsumos();
@@ -734,6 +767,7 @@
     if (subpanelId === 'sub-mesas-plano') cargarPlanoEditor();
     if (subpanelId === 'sub-compras') { cargarProveedoresSelect(); cargarCompras(); }
     if (subpanelId === 'sub-proveedores') cargarProveedores();
+    if (subpanelId === 'sub-stock-critico') { cargarChecklistInsumosCriticos(); cargarStockCritico(); }
   }
 
   /* ---------------- DASHBOARD ---------------- */
@@ -790,7 +824,40 @@
     }
   }
 
-  /* ---------------- EN VIVO ---------------- */
+  /* ---------------- PAUSAR IMPRESIÓN ---------------- */
+  async function cargarEstadoPausaImpresion() {
+    try {
+      const estado = await Api.get('/impresion/estado');
+      pintarBloquePausaImpresion(estado.impresionPausada);
+    } catch (err) {
+      document.getElementById('bloque-pausa-impresion').innerHTML = '';
+    }
+  }
+
+  function pintarBloquePausaImpresion(pausada) {
+    const cont = document.getElementById('bloque-pausa-impresion');
+    if (pausada) {
+      cont.innerHTML = `
+        <p style="font-size:0.82rem; color:#c0392b; font-weight:600; margin-bottom:8px;">⏸ La impresión automática está PAUSADA en todas las consolas (Cocina, Barra, Admin, Caja).</p>
+        <button class="btn-crear" style="background:#2e7d5b;" onclick="togglePausaImpresion(false)">▶ Reanudar impresión</button>
+      `;
+    } else {
+      cont.innerHTML = `
+        <p style="font-size:0.78rem; opacity:0.6; margin-bottom:8px;">Si necesitas parar todas las impresoras un momento (ej. cambiar rollo de papel, mantenimiento), puedes pausar aquí — se pausa en todas las consolas a la vez y las comandas se quedan esperando, no se pierden.</p>
+        <button class="btn-crear" style="background:#c0392b;" onclick="togglePausaImpresion(true)">⏸ Pausar impresión</button>
+      `;
+    }
+  }
+
+  async function togglePausaImpresion(pausar) {
+    try {
+      const res = await Api.patch('/impresion/pausar', { pausada: pausar });
+      pintarBloquePausaImpresion(res.impresionPausada);
+      mostrarToast(res.impresionPausada ? 'Impresión pausada en todas las consolas' : 'Impresión reanudada en todas las consolas');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
   async function cargarVivo() {
     const cont = document.getElementById('grid-vivo');
     try {
@@ -1106,6 +1173,98 @@
     }
   }
 
+  /* ---------------- STOCK CRÍTICO ---------------- */
+  const CLAVE_STOCK_CRITICO = 'marisquito_insumos_criticos';
+  let stockCriticoActual = []; // último reporte cargado, para poder imprimirlo sin volver a pedirlo
+
+  function idsInsumosCriticosGuardados() {
+    try {
+      const guardado = localStorage.getItem(CLAVE_STOCK_CRITICO);
+      if (guardado) return JSON.parse(guardado);
+    } catch (e) { /* si está corrupto, seguimos con la sugerencia por nombre */ }
+    // Primera vez: sugerimos automáticamente los insumos que ya tengas creados con estos nombres.
+    const patron = /arrachera|milanesa|mojarra/i;
+    return insumosCache.filter(i => patron.test(i.nombre)).map(i => i._id);
+  }
+
+  function cargarChecklistInsumosCriticos() {
+    const cont = document.getElementById('checklist-insumos-criticos');
+    if (insumosCache.length === 0) {
+      cont.innerHTML = '<div class="ticket-vacio">Primero crea tus insumos en la pestaña "Insumos"</div>';
+      return;
+    }
+    const seleccionados = new Set(idsInsumosCriticosGuardados());
+    cont.innerHTML = insumosCache.map(i => `
+      <label style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:0.85rem; cursor:pointer;">
+        <input type="checkbox" value="${i._id}" style="width:auto;" ${seleccionados.has(i._id) ? 'checked' : ''}>
+        ${i.nombre} <span style="opacity:0.55;">(${i.stockActual} ${i.unidad})</span>
+      </label>
+    `).join('');
+  }
+
+  function guardarSeleccionStockCritico() {
+    const ids = Array.from(document.querySelectorAll('#checklist-insumos-criticos input:checked')).map(chk => chk.value);
+    localStorage.setItem(CLAVE_STOCK_CRITICO, JSON.stringify(ids));
+    mostrarToast('Selección guardada');
+    cargarStockCritico();
+  }
+
+  async function cargarStockCritico() {
+    const cont = document.getElementById('tabla-stock-critico');
+    const ids = idsInsumosCriticosGuardados();
+    if (ids.length === 0) {
+      cont.innerHTML = '<div class="cargando">Elige insumos arriba y guarda la selección…</div>';
+      stockCriticoActual = [];
+      return;
+    }
+    cont.innerHTML = '<div class="cargando">Cargando…</div>';
+    try {
+      stockCriticoActual = await Api.get(`/admin/reportes/stock-critico?insumos=${ids.join(',')}`);
+      cont.innerHTML = `
+        <table>
+          <thead><tr><th>Insumo</th><th>Quedan</th><th>Vendidos hoy</th></tr></thead>
+          <tbody>
+            ${stockCriticoActual.map(i => `
+              <tr>
+                <td>${i.nombre}</td>
+                <td>${i.stockActual} ${i.unidad}</td>
+                <td>${i.vendidoHoy} ${i.unidad}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (err) {
+      cont.innerHTML = '';
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function imprimirStockCritico() {
+    if (stockCriticoActual.length === 0) {
+      mostrarToast('No hay nada que imprimir — elige insumos primero', true);
+      return;
+    }
+    const fecha = new Date().toLocaleString('es-MX');
+    const html = `
+      <h2>EL MARISQUITO</h2>
+      <div class="centrado chico">Stock crítico — ${fecha}</div>
+      <div class="linea-punteada"></div>
+      ${stockCriticoActual.map(i => `
+        <div class="chico" style="font-weight:700; margin-top:4px;">${i.nombre}</div>
+        <div class="fila-print"><span>Quedan</span><span>${i.stockActual} ${i.unidad}</span></div>
+        <div class="fila-print"><span>Vendidos hoy</span><span>${i.vendidoHoy} ${i.unidad}</span></div>
+      `).join('')}
+      <div class="linea-punteada"></div>
+    `;
+    try {
+      await Api.post('/impresion', { tipo: 'ticket', html, estacion: 'admin' });
+      mostrarToast('Reporte de stock crítico enviado a la impresora');
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
+  }
+
   async function crearInsumo(e) {
     e.preventDefault();
     try {
@@ -1283,6 +1442,8 @@
     document.getElementById(id).classList.remove('mostrar');
   }
 
+  let corteDiaActual = null;
+
   async function abrirCorteDiaAdmin(fecha) {
     document.getElementById('modal-corte-dia').classList.add('mostrar');
     const cont = document.getElementById('corte-dia-cuerpo');
@@ -1290,11 +1451,21 @@
     try {
       const ruta = fecha ? `/caja/corte-dia?fecha=${fecha}` : '/caja/corte-dia';
       const c = await Api.get(ruta);
+      corteDiaActual = c;
 
       const hoyMexico = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
       const esHoy = c.fecha === hoyMexico;
       const fechaLegible = new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
       document.getElementById('titulo-corte-dia').textContent = esHoy ? '📊 Corte de hoy' : `📊 Corte del ${fechaLegible}`;
+
+      // Ventas por mesero, solo de este día (agrupado aquí mismo del detalle que ya trae el corte)
+      const porMeseroDia = {};
+      for (const v of c.detalleVentas) {
+        if (!porMeseroDia[v.mesero]) porMeseroDia[v.mesero] = { cuentas: 0, total: 0 };
+        porMeseroDia[v.mesero].cuentas += 1;
+        porMeseroDia[v.mesero].total += v.total;
+      }
+      const listaPorMesero = Object.entries(porMeseroDia).sort((a, b) => b[1].total - a[1].total);
 
       cont.innerHTML = `
         <div class="resumen-linea"><span>Cuentas cobradas</span><span>${c.ventas.numCuentas}</span></div>
@@ -1306,6 +1477,14 @@
         <div class="resumen-linea"><span>Gastos fijos</span><span>-$${c.gastos.fijos.toFixed(2)}</span></div>
         <div class="resumen-linea"><span>Gastos variables</span><span>-$${c.gastos.variables.toFixed(2)}</span></div>
         <div class="resumen-linea total-final"><span>Utilidad bruta</span><span>$${c.utilidadBruta.toFixed(2)}</span></div>
+        <div class="linea-punteada" style="margin:14px 0 8px;"></div>
+        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; opacity:0.7; margin-bottom:6px;">Ventas por mesero ese día</div>
+        ${listaPorMesero.length === 0 ? '<div class="ticket-vacio">Sin ventas ese día</div>' : listaPorMesero.map(([nombre, datos]) => `
+          <div class="resumen-linea" style="font-size:0.85rem;">
+            <span>${nombre} · ${datos.cuentas} cta${datos.cuentas === 1 ? '' : 's'}</span>
+            <span>$${datos.total.toFixed(2)}</span>
+          </div>
+        `).join('')}
         <div class="linea-punteada" style="margin:14px 0 8px;"></div>
         <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; opacity:0.7; margin-bottom:6px;">Cuentas de ese día, una por una — qué se pidió y quién la atendió</div>
         ${c.detalleVentas.length === 0
@@ -1325,6 +1504,50 @@
       `;
     } catch (err) {
       cont.innerHTML = '';
+      mostrarToast(err.message, true);
+    }
+  }
+
+  // Ticket compacto para impresora térmica: totales + ventas por mesero (no repite
+  // el detalle línea por línea de cada cuenta, para no gastar rollo de más).
+  async function imprimirReporteDelDia() {
+    if (!corteDiaActual) return;
+    const c = corteDiaActual;
+    const fechaLegible = new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    const porMeseroDia = {};
+    for (const v of c.detalleVentas) {
+      if (!porMeseroDia[v.mesero]) porMeseroDia[v.mesero] = { cuentas: 0, total: 0 };
+      porMeseroDia[v.mesero].cuentas += 1;
+      porMeseroDia[v.mesero].total += v.total;
+    }
+    const listaPorMesero = Object.entries(porMeseroDia).sort((a, b) => b[1].total - a[1].total);
+
+    const html = `
+      <h2>EL MARISQUITO</h2>
+      <div class="centrado chico">Reporte de ventas — ${fechaLegible}</div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print"><span>Cuentas cobradas</span><span>${c.ventas.numCuentas}</span></div>
+      <div class="fila-print"><span>Efectivo</span><span>$${c.ventas.efectivo.toFixed(2)}</span></div>
+      <div class="fila-print"><span>Tarjeta</span><span>$${c.ventas.tarjeta.toFixed(2)}</span></div>
+      <div class="fila-print"><span>Mixto</span><span>$${c.ventas.mixto.toFixed(2)}</span></div>
+      <div class="fila-print total-print"><span>TOTAL VENDIDO</span><span>$${c.ventas.total.toFixed(2)}</span></div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print"><span>Gastos fijos</span><span>-$${c.gastos.fijos.toFixed(2)}</span></div>
+      <div class="fila-print"><span>Gastos variables</span><span>-$${c.gastos.variables.toFixed(2)}</span></div>
+      <div class="fila-print total-print"><span>Utilidad bruta</span><span>$${c.utilidadBruta.toFixed(2)}</span></div>
+      <div class="linea-punteada"></div>
+      <div class="centrado chico" style="font-weight:700;">VENTAS POR MESERO</div>
+      ${listaPorMesero.map(([nombre, datos]) => `
+        <div class="fila-print"><span>${nombre} (${datos.cuentas})</span><span>$${datos.total.toFixed(2)}</span></div>
+      `).join('')}
+      <div class="linea-punteada"></div>
+    `;
+
+    try {
+      await Api.post('/impresion', { tipo: 'ticket', html, estacion: 'admin' });
+      mostrarToast('Reporte del día enviado a la impresora');
+    } catch (err) {
       mostrarToast(err.message, true);
     }
   }
@@ -1731,9 +1954,11 @@
     }
   }
 
+  let mostrandoTodosProductos = false;
+
   async function cargarTopProductos() {
     try {
-      const top = await Api.get('/admin/reportes/top-productos');
+      const top = await Api.get(`/admin/reportes/top-productos${mostrandoTodosProductos ? '?todos=1' : ''}`);
       const tabla = document.getElementById('tabla-top-productos');
       tabla.innerHTML = top.length === 0
         ? '<div class="ticket-vacio">Aún no hay ventas registradas</div>'
@@ -1743,6 +1968,12 @@
     } catch (err) {
       mostrarToast(err.message, true);
     }
+  }
+
+  function toggleTopProductos() {
+    mostrandoTodosProductos = !mostrandoTodosProductos;
+    document.getElementById('btn-toggle-top-productos').textContent = mostrandoTodosProductos ? 'Ver solo top 10' : 'Ver todos';
+    cargarTopProductos();
   }
 
   async function cargarPorMesero() {

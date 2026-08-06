@@ -31,13 +31,20 @@
   let procesando = false;
   let estacionesActuales = [];
   let requiereToqueForzado = false; // true = mostrar el botón de "toca para imprimir" aunque este dispositivo no use RawBT
+  let impresionPausada = false; // el admin puede pausar la impresión automática en TODAS las consolas a la vez
 
-  window.iniciarImpresionAutomatica = function (estacion, opciones) {
+  window.iniciarImpresionAutomatica = async function (estacion, opciones) {
     estacionesActuales = Array.isArray(estacion) ? estacion : [estacion];
     requiereToqueForzado = !!(opciones && opciones.requiereToque);
     asegurarZonaImprimible();
     montarIndicador();
     conectarTiempoRealImpresion();
+
+    try {
+      const estado = await Api.get('/impresion/estado');
+      impresionPausada = !!(estado && estado.impresionPausada);
+      actualizarIndicadorPausa();
+    } catch (err) { /* si falla, seguimos como si no estuviera pausada */ }
 
     if (modoBoton()) {
       revisarPendientesBoton();
@@ -68,8 +75,20 @@
     try {
       const socket = io();
       socket.on('nuevaImpresion', () => {
+        if (impresionPausada) return;
         if (modoBoton()) revisarPendientesBoton();
         else revisarPendientes();
+      });
+      socket.on('estadoImpresion', (data) => {
+        impresionPausada = !!(data && data.impresionPausada);
+        actualizarIndicadorPausa();
+        if (impresionPausada) {
+          ocultarAvisoRawBT();
+        } else if (modoBoton()) {
+          revisarPendientesBoton();
+        } else {
+          revisarPendientes();
+        }
       });
     } catch (err) {
       console.warn('Socket.io no disponible, la impresión automática seguirá por polling');
@@ -79,7 +98,7 @@
   // ---------- Flujo normal (window.print / kiosk-printing): sí puede ser 100% automático ----------
 
   async function revisarPendientes() {
-    if (procesando || estacionesActuales.length === 0) return;
+    if (procesando || estacionesActuales.length === 0 || impresionPausada) return;
     procesando = true;
     try {
       for (const estacion of estacionesActuales) {
@@ -120,7 +139,7 @@
   // perderse marcado como impreso sin haberse impreso de verdad (o robárselo en silencio
   // a otra pantalla que también podía imprimirlo, ej. Admin robándole una comanda a Barra).
   async function revisarPendientesBoton() {
-    if (procesando || estacionesActuales.length === 0) return;
+    if (procesando || estacionesActuales.length === 0 || impresionPausada) return;
     procesando = true;
     try {
       let totalPendientes = 0;
@@ -355,9 +374,23 @@
 
   function marcarEnIndicador(trabajo) {
     const txt = document.getElementById('indicador-impresion-texto');
-    if (!txt) return;
+    if (!txt || impresionPausada) return;
     const etiqueta = trabajo.tipo === 'comanda' ? '🍽 Comanda impresa' : '🧾 Ticket impreso';
     txt.textContent = etiqueta;
-    setTimeout(() => { txt.textContent = 'Impresión automática activa'; }, 2500);
+    setTimeout(() => { if (!impresionPausada) txt.textContent = 'Impresión automática activa'; }, 2500);
+  }
+
+  function actualizarIndicadorPausa() {
+    const cont = document.getElementById('indicador-impresion-auto');
+    const txt = document.getElementById('indicador-impresion-texto');
+    const punto = cont ? cont.querySelector('span[style*="border-radius:50%"]') : null;
+    if (!txt) return;
+    if (impresionPausada) {
+      txt.textContent = '⏸ Impresión pausada por Admin';
+      if (punto) punto.style.background = '#c0392b';
+    } else {
+      txt.textContent = 'Impresión automática activa';
+      if (punto) punto.style.background = '#2e7d5b';
+    }
   }
 })();

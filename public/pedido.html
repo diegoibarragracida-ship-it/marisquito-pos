@@ -97,10 +97,10 @@
   <div class="modal-caja">
     <h3>Agregar a la comanda</h3>
     <p style="font-size:0.85rem; opacity:0.7;" id="modal-producto-nombre"></p>
-    <div style="display:flex; align-items:center; justify-content:center; gap:18px; margin:14px 0;">
-      <button type="button" onclick="cambiarCantidadModal(-1)" style="width:44px; height:44px; border-radius:50%; border:2px solid var(--oceano); background:#fff; color:var(--oceano); font-size:1.4rem; font-weight:700; cursor:pointer; line-height:1;">−</button>
-      <span id="modal-cantidad-valor" style="font-size:1.6rem; font-weight:800; min-width:34px; text-align:center;">1</span>
-      <button type="button" onclick="cambiarCantidadModal(1)" style="width:44px; height:44px; border-radius:50%; border:2px solid var(--oceano); background:var(--oceano); color:#fff; font-size:1.4rem; font-weight:700; cursor:pointer; line-height:1;">+</button>
+    <div style="display:flex; align-items:center; justify-content:center; gap:22px; margin:14px 0;">
+      <button type="button" onclick="cambiarCantidadModal(-1)" style="width:64px; height:64px; border-radius:50%; border:3px solid var(--oceano); background:#fff; color:var(--oceano); font-size:2rem; font-weight:700; cursor:pointer; line-height:1;">−</button>
+      <span id="modal-cantidad-valor" style="font-size:2.2rem; font-weight:800; min-width:46px; text-align:center;">1</span>
+      <button type="button" onclick="cambiarCantidadModal(1)" style="width:64px; height:64px; border-radius:50%; border:3px solid var(--oceano); background:var(--oceano); color:#fff; font-size:2rem; font-weight:700; cursor:pointer; line-height:1;">+</button>
     </div>
     <div id="bloque-variantes" style="display:none; margin-bottom:14px;">
       <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Elige el tamaño</label>
@@ -391,7 +391,7 @@
       precioUnitario
     });
 
-    mostrarToast(`${cantidadModal}× ${producto.nombre} agregado${cantidadModal > 1 ? 's' : ''} — te falta enviar la orden`);
+    mostrarToast(`${cantidadModal}× ${producto.nombre} agregado${cantidadModal > 1 ? 's' : ''}`);
     cerrarModal();
     pintarCarrito();
   }

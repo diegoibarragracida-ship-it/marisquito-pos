@@ -7,6 +7,7 @@ const Mesa = require('../models/Mesa');
 const CorteCaja = require('../models/CorteCaja');
 const Promocion = require('../models/Promocion');
 const Gasto = require('../models/Gasto');
+const Factura = require('../models/Factura');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
 const { inicioDiaMexico, claveDiaMexico } = require('../utils/fechasMexico');
 
@@ -67,8 +68,15 @@ router.post('/dividir/:pedidoId', verificarToken, permitirRoles('cajero', 'admin
 router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
   const session = await mongoose.startSession();
   try {
-    const { metodoPago, propina, descuento, promocionId, montoEfectivo, montoTarjeta } = req.body; // metodoPago: efectivo | tarjeta | mixto
+    const { metodoPago, propina, descuento, promocionId, montoEfectivo, montoTarjeta, tipoTarjeta, factura } = req.body; // metodoPago: efectivo | tarjeta | mixto
     let resultado;
+    let pedidoIdParaFactura = null;
+
+    // Si hay tarjeta de por medio (completa o dentro de un pago mixto), débito/crédito es obligatorio.
+    const llevaTarjeta = metodoPago === 'tarjeta' || (metodoPago === 'mixto' && Number(montoTarjeta) > 0);
+    if (llevaTarjeta && !['debito', 'credito'].includes(tipoTarjeta)) {
+      return res.status(400).json({ error: 'Falta indicar si la tarjeta es débito o crédito' });
+    }
 
     await session.withTransaction(async () => {
       const pedido = await Pedido.findById(req.params.pedidoId).populate('items.producto').session(session);
@@ -105,7 +113,9 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
       pedido.total = total;
       pedido.estadoCuenta = 'cerrada';
       pedido.metodoPago = metodoPago || 'efectivo';
+      pedido.tipoTarjeta = llevaTarjeta ? tipoTarjeta : null;
       await pedido.save({ session });
+      pedidoIdParaFactura = pedido._id;
 
       // Liberar la mesa (si el pedido es "para llevar" no hay mesa que liberar).
       // Va en la MISMA transacción que cerrar el pedido: o pasan los dos juntos, o
@@ -119,7 +129,30 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
       resultado = { pedido, subtotal, descuentoPromocion, promocionAplicada, descuento: descuento || 0, propina: propina || 0, total, metodoPago };
     });
 
-    res.json(resultado);
+    let facturaGuardada = null;
+    let errorFactura = null;
+    if (factura && factura.rfc) {
+      try {
+        facturaGuardada = await Factura.create({
+          pedido: pedidoIdParaFactura,
+          total: resultado.total,
+          rfc: factura.rfc,
+          razonSocial: factura.razonSocial,
+          domicilioFiscal: factura.domicilioFiscal,
+          regimenFiscal: factura.regimenFiscal,
+          usoCFDI: factura.usoCFDI,
+          correo: factura.correo,
+          formaPago: factura.formaPago,
+          solicitadaPor: req.usuario.id
+        });
+      } catch (errFact) {
+        // El cobro YA se cerró (va en la transacción de arriba, que ya terminó bien).
+        // Si fallan los datos de factura, no se debe reportar la venta como fallida.
+        errorFactura = 'La cuenta se cobró bien, pero los datos de factura no se guardaron: ' + errFact.message;
+      }
+    }
+
+    res.json({ ...resultado, factura: facturaGuardada, errorFactura });
   } catch (err) {
     res.status(400).json({ error: err.message });
   } finally {
@@ -131,15 +164,19 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
 router.post('/pagos/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
   const session = await mongoose.startSession();
   try {
-    const { monto, metodoPago, persona } = req.body;
+    const { monto, metodoPago, tipoTarjeta, persona } = req.body;
     let resultado;
+
+    if (metodoPago === 'tarjeta' && !['debito', 'credito'].includes(tipoTarjeta)) {
+      return res.status(400).json({ error: 'Falta indicar si la tarjeta es débito o crédito' });
+    }
 
     await session.withTransaction(async () => {
       const pedido = await Pedido.findById(req.params.pedidoId).populate('items.producto').session(session);
       if (!pedido) throw new Error('Pedido no encontrado');
       if (pedido.estadoCuenta !== 'abierta') throw new Error('Esta cuenta ya fue cerrada');
 
-      pedido.pagos.push({ monto, metodoPago, persona });
+      pedido.pagos.push({ monto, metodoPago, tipoTarjeta: metodoPago === 'tarjeta' ? tipoTarjeta : null, persona });
 
       const subtotal = pedido.items
         .filter(i => i.estado !== 'cancelado')
@@ -309,6 +346,17 @@ router.patch('/turno/:id/cerrar', verificarToken, permitirRoles('cajero', 'admin
       { new: true }
     );
     res.json(corte);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Facturas pendientes de entregar al contador. Se ven hasta que se autoborran solas
+// a los 15 días de creadas (índice TTL en el modelo, no hay que borrar nada a mano).
+router.get('/facturas', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  try {
+    const facturas = await Factura.find().populate('solicitadaPor', 'nombre').sort('-createdAt');
+    res.json(facturas);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

@@ -19,10 +19,10 @@ const colaImpresionSchema = new mongoose.Schema({
     type: String,
     enum: ['cocina', 'barra', 'admin']
     // 'cocina'  -> SOLO la consola de Cocina (nunca cuentas, nunca barra)
-    // 'barra'   -> comandas de bebidas/cocteles: las recoge SOLO la estación Barra
-    //              (Admin y Caja ya no las escuchan, para no ganárselas en silencio
-    //              a la impresora física de Barra — antes causaba que el aviso rojo
-    //              de "toca para imprimir" desapareciera en Barra sin que nadie lo tocara)
+    // 'barra'   -> comandas de bebidas/cocteles: las recoge la estación Barra, Admin o Caja
+    //              (cualquiera de las 3 que esté abierta primero). Admin y Caja lo hacen en
+    //              "modo botón" (requiereToque:true) para no robarle en silencio el ticket
+    //              a la impresora física de Barra sin que nadie decida imprimirlo ahí.
     // 'admin'   -> cuentas/tickets: las recoge Admin o Caja (la que esté abierta primero)
     // sin valor -> compatibilidad vieja, se imprime en cualquier estación
   }

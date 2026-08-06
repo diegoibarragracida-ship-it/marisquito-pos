@@ -66,6 +66,7 @@ const pedidoSchema = new mongoose.Schema({
   pagos: [{
     monto: Number,
     metodoPago: String,
+    tipoTarjeta: { type: String, enum: ['debito', 'credito', null], default: null }, // solo si metodoPago === 'tarjeta'
     persona: String, // etiqueta opcional, ej. "Persona 1"
     fecha: { type: Date, default: Date.now }
   }],
@@ -78,6 +79,7 @@ const pedidoSchema = new mongoose.Schema({
     enum: ['efectivo', 'tarjeta', 'mixto', null],
     default: null
   },
+  tipoTarjeta: { type: String, enum: ['debito', 'credito', null], default: null }, // débito o crédito, cuando metodoPago incluye tarjeta
   montoEfectivo: { type: Number, default: 0 }, // solo se usa cuando metodoPago === 'mixto'
   montoTarjeta: { type: Number, default: 0 }
 }, { timestamps: true });

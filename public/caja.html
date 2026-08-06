@@ -26,6 +26,7 @@
   </div>
 
   <div style="display:flex; justify-content:flex-end; gap:10px; margin-bottom:14px;">
+    <button class="btn-volver" style="width:auto; padding:10px 20px; font-weight:600;" onclick="abrirFacturas()">📄 Facturas pendientes</button>
     <button class="btn-volver" style="width:auto; padding:10px 20px; font-weight:600;" onclick="abrirCorteHistorial()">📅 Historial por día</button>
     <button class="btn-volver" style="width:auto; padding:10px 20px; font-weight:600;" onclick="abrirCorteDia()">📊 Corte del día</button>
   </div>
@@ -127,6 +128,14 @@
       <button type="button" data-metodo="mixto" onclick="elegirMetodo('mixto')">Mixto</button>
     </div>
 
+    <div id="bloque-tipo-tarjeta" style="display:none; margin-top:8px;">
+      <label style="display:block; font-size:0.72rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:6px;">¿Débito o crédito?</label>
+      <div class="metodo-pago-grupo">
+        <button type="button" data-tipotarjeta="debito" onclick="elegirTipoTarjeta('debito')">Débito</button>
+        <button type="button" data-tipotarjeta="credito" onclick="elegirTipoTarjeta('credito')">Crédito</button>
+      </div>
+    </div>
+
     <div id="bloque-mixto" style="display:none; margin-top:10px;">
       <div class="campo-inline">
         <label>¿Cuánto en efectivo?</label>
@@ -139,7 +148,49 @@
       <p id="mixto-aviso" style="font-size:0.8rem; margin-top:-6px; margin-bottom:10px;"></p>
     </div>
 
-    <div class="resumen-linea total-final">
+    <label style="display:flex; align-items:center; gap:8px; margin-top:14px; font-size:0.85rem; cursor:pointer;">
+      <input type="checkbox" id="chk-requiere-factura" style="width:auto;" onchange="toggleFactura()">
+      ¿Requiere factura?
+    </label>
+    <div id="bloque-factura" style="display:none; margin-top:8px; background:#faf6ef; border-radius:10px; padding:12px;">
+      <p style="font-size:0.72rem; opacity:0.7; margin-bottom:8px;">Se guardan estos datos para que se facture después con tu contador/sistema fiscal — esto NO timbra nada ante el SAT. Se guardan 15 días y luego se borran solos.</p>
+      <div class="campo-inline">
+        <label>RFC</label>
+        <input type="text" id="input-factura-rfc" style="text-transform:uppercase;">
+      </div>
+      <div class="campo-inline">
+        <label>Razón social</label>
+        <input type="text" id="input-factura-razon">
+      </div>
+      <div class="campo-inline">
+        <label>Domicilio fiscal</label>
+        <input type="text" id="input-factura-domicilio">
+      </div>
+      <div class="campo-inline">
+        <label>Régimen fiscal</label>
+        <input type="text" id="input-factura-regimen" placeholder="ej. 601 - General de Ley Personas Morales">
+      </div>
+      <div class="campo-inline">
+        <label>Uso de CFDI</label>
+        <input type="text" id="input-factura-uso-cfdi" placeholder="ej. G03 - Gastos en general">
+      </div>
+      <div class="campo-inline">
+        <label>Correo</label>
+        <input type="email" id="input-factura-correo">
+      </div>
+      <div class="campo-inline">
+        <label>Forma de pago (SAT)</label>
+        <select id="input-factura-forma-pago">
+          <option value="01 - Efectivo">01 - Efectivo</option>
+          <option value="03 - Transferencia electrónica de fondos">03 - Transferencia electrónica de fondos</option>
+          <option value="04 - Tarjeta de crédito">04 - Tarjeta de crédito</option>
+          <option value="28 - Tarjeta de débito">28 - Tarjeta de débito</option>
+          <option value="99 - Por definir">99 - Por definir</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="resumen-linea total-final" style="margin-top:14px;">
       <span>Total a cobrar</span>
       <span id="cobrar-total-final">$0.00</span>
     </div>
@@ -169,6 +220,18 @@
   </div>
 </div>
 
+<!-- Modal: facturas pendientes -->
+<div class="modal-fondo" id="modal-facturas">
+  <div class="modal-caja ancho">
+    <h3>📄 Facturas pendientes</h3>
+    <p style="font-size:0.78rem; opacity:0.7; margin-bottom:10px;">Se autoborran solas a los 15 días de solicitadas — entrégalas a tu contador antes de que se venza ese plazo.</p>
+    <div id="lista-facturas"><div class="cargando">Cargando…</div></div>
+    <div class="modal-botones">
+      <button class="btn-volver" onclick="cerrarModal('modal-facturas')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/config.js"></script>
 <script src="/js/api.js"></script>
@@ -178,6 +241,7 @@
   let turnoActual = null;
   let pedidoEnCobro = null;
   let metodoSeleccionado = 'efectivo';
+  let tipoTarjetaSeleccionado = null;
   let promosVigentesCache = [];
 
   if (usuario) {
@@ -333,7 +397,16 @@
   async function abrirCobro(pedido) {
     pedidoEnCobro = pedido;
     metodoSeleccionado = 'efectivo';
-    document.querySelectorAll('.metodo-pago-grupo button').forEach(b => b.classList.toggle('activo', b.dataset.metodo === 'efectivo'));
+    tipoTarjetaSeleccionado = null;
+    document.querySelectorAll('.metodo-pago-grupo button[data-metodo]').forEach(b => b.classList.toggle('activo', b.dataset.metodo === 'efectivo'));
+    document.querySelectorAll('#bloque-tipo-tarjeta button[data-tipotarjeta]').forEach(b => b.classList.remove('activo'));
+    document.getElementById('bloque-tipo-tarjeta').style.display = 'none';
+    document.getElementById('chk-requiere-factura').checked = false;
+    document.getElementById('bloque-factura').style.display = 'none';
+    ['rfc', 'razon', 'domicilio', 'regimen', 'uso-cfdi', 'correo'].forEach(campo => {
+      const el = document.getElementById('input-factura-' + campo);
+      if (el) el.value = '';
+    });
     document.getElementById('cobrar-titulo').textContent = pedido.tipo === 'para_llevar'
       ? `🥡 Para llevar${pedido.clienteLlevar ? ' — ' + pedido.clienteLlevar : ''}`
       : `Mesa ${textoMesasUnidas(pedido)}`;
@@ -439,7 +512,7 @@
 
   function elegirMetodo(metodo) {
     metodoSeleccionado = metodo;
-    document.querySelectorAll('.metodo-pago-grupo button').forEach(b => b.classList.toggle('activo', b.dataset.metodo === metodo));
+    document.querySelectorAll('.metodo-pago-grupo button[data-metodo]').forEach(b => b.classList.toggle('activo', b.dataset.metodo === metodo));
     document.getElementById('bloque-mixto').style.display = metodo === 'mixto' ? 'block' : 'none';
     if (metodo === 'mixto') {
       const total = totalActualCobro();
@@ -447,6 +520,41 @@
       document.getElementById('input-mixto-tarjeta').value = '0.00';
       validarMixto();
     }
+    actualizarBloqueTipoTarjeta();
+  }
+
+  function elegirTipoTarjeta(tipo) {
+    tipoTarjetaSeleccionado = tipo;
+    document.querySelectorAll('#bloque-tipo-tarjeta button[data-tipotarjeta]').forEach(b => b.classList.toggle('activo', b.dataset.tipotarjeta === tipo));
+  }
+
+  // El bloque de "¿débito o crédito?" solo aparece si de verdad hay tarjeta de por medio:
+  // método = tarjeta directo, o método = mixto con algo de tarjeta en el desglose.
+  function actualizarBloqueTipoTarjeta() {
+    const tarjetaEnMixto = metodoSeleccionado === 'mixto' && (Number(document.getElementById('input-mixto-tarjeta').value) || 0) > 0;
+    const llevaTarjeta = metodoSeleccionado === 'tarjeta' || tarjetaEnMixto;
+    document.getElementById('bloque-tipo-tarjeta').style.display = llevaTarjeta ? 'block' : 'none';
+    if (!llevaTarjeta) tipoTarjetaSeleccionado = null;
+  }
+
+  function toggleFactura() {
+    const activo = document.getElementById('chk-requiere-factura').checked;
+    document.getElementById('bloque-factura').style.display = activo ? 'block' : 'none';
+  }
+
+  function datosFacturaONull() {
+    if (!document.getElementById('chk-requiere-factura').checked) return null;
+    const rfc = document.getElementById('input-factura-rfc').value.trim();
+    const razonSocial = document.getElementById('input-factura-razon').value.trim();
+    const domicilioFiscal = document.getElementById('input-factura-domicilio').value.trim();
+    const regimenFiscal = document.getElementById('input-factura-regimen').value.trim();
+    const usoCFDI = document.getElementById('input-factura-uso-cfdi').value.trim();
+    const correo = document.getElementById('input-factura-correo').value.trim();
+    const formaPago = document.getElementById('input-factura-forma-pago').value;
+    if (!rfc || !razonSocial || !domicilioFiscal || !regimenFiscal || !usoCFDI || !correo) {
+      throw new Error('Faltan datos de la factura (RFC, razón social, domicilio, régimen fiscal, uso CFDI y correo son obligatorios)');
+    }
+    return { rfc, razonSocial, domicilioFiscal, regimenFiscal, usoCFDI, correo, formaPago };
   }
 
   function totalActualCobro() {
@@ -469,6 +577,7 @@
       campoEfectivo.value = Math.max(0, total - tarjeta).toFixed(2);
     }
     validarMixto();
+    actualizarBloqueTipoTarjeta();
   }
 
   function validarMixto() {
@@ -491,17 +600,30 @@
       mostrarToast('El efectivo + tarjeta debe sumar exactamente el total', true);
       return;
     }
+    const llevaTarjeta = metodoSeleccionado === 'tarjeta' ||
+      (metodoSeleccionado === 'mixto' && (Number(document.getElementById('input-mixto-tarjeta').value) || 0) > 0);
+    if (llevaTarjeta && !tipoTarjetaSeleccionado) {
+      mostrarToast('Falta indicar si la tarjeta es débito o crédito', true);
+      return;
+    }
+    let factura;
+    try {
+      factura = datosFacturaONull();
+    } catch (err) {
+      mostrarToast(err.message, true);
+      return;
+    }
     try {
       const descuento = Number(document.getElementById('input-descuento').value) || 0;
       const propina = Number(document.getElementById('input-propina').value) || 0;
       const promocionId = document.getElementById('input-promocion').value || null;
-      const cuerpo = { metodoPago: metodoSeleccionado, propina, descuento, promocionId };
+      const cuerpo = { metodoPago: metodoSeleccionado, propina, descuento, promocionId, tipoTarjeta: tipoTarjetaSeleccionado, factura };
       if (metodoSeleccionado === 'mixto') {
         cuerpo.montoEfectivo = Number(document.getElementById('input-mixto-efectivo').value) || 0;
         cuerpo.montoTarjeta = Number(document.getElementById('input-mixto-tarjeta').value) || 0;
       }
-      await Api.post(`/caja/cobrar/${pedidoEnCobro._id}`, cuerpo);
-      mostrarToast('Cuenta cobrada y mesa liberada');
+      const resultado = await Api.post(`/caja/cobrar/${pedidoEnCobro._id}`, cuerpo);
+      mostrarToast(resultado.errorFactura ? resultado.errorFactura : 'Cuenta cobrada y mesa liberada', !!resultado.errorFactura);
       cerrarModal('modal-cobrar');
       cargarCuentas();
       // Aprovechamos este mismo clic (que el cajero de todos modos da en cada venta) para
@@ -643,6 +765,59 @@
       `;
     } catch (err) {
       cont.innerHTML = '';
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function abrirFacturas() {
+    document.getElementById('modal-facturas').classList.add('mostrar');
+    const cont = document.getElementById('lista-facturas');
+    cont.innerHTML = '<div class="cargando">Cargando…</div>';
+    try {
+      const facturas = await Api.get('/caja/facturas');
+      if (facturas.length === 0) {
+        cont.innerHTML = '<div class="comanda-vacia">No hay facturas pendientes</div>';
+        return;
+      }
+      cont.innerHTML = `<div style="max-height:60vh; overflow-y:auto;">${facturas.map(f => `
+        <div class="resumen-linea" style="align-items:flex-start; flex-direction:column; gap:4px; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; width:100%;">
+            <strong>${f.razonSocial}</strong>
+            <span>$${(f.total || 0).toFixed(2)}</span>
+          </div>
+          <span style="font-size:0.8rem; opacity:0.75;">RFC: ${f.rfc} · ${f.correo}</span>
+          <span style="font-size:0.72rem; opacity:0.6;">Pedida el ${new Date(f.createdAt).toLocaleString('es-MX')}${f.solicitadaPor ? ' — ' + f.solicitadaPor.nombre : ''}</span>
+          <button class="btn-mini-toggle" style="margin-top:4px; padding:5px 10px; font-size:0.72rem;" onclick='imprimirFactura(${JSON.stringify(f).replace(/'/g, "&apos;")})'>🖨 Imprimir datos</button>
+        </div>
+      `).join('')}</div>`;
+    } catch (err) {
+      cont.innerHTML = '';
+      mostrarToast(err.message, true);
+    }
+  }
+
+  async function imprimirFactura(f) {
+    const fecha = new Date().toLocaleString('es-MX');
+    const html = `
+      <div class="centrado chico" style="font-weight:700; letter-spacing:1px;">DATOS PARA FACTURA</div>
+      <h2>EL MARISQUITO</h2>
+      <div class="centrado chico">${fecha}</div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print"><span>RFC</span><span>${f.rfc}</span></div>
+      <div class="chico">${f.razonSocial}</div>
+      <div class="chico">${f.domicilioFiscal}</div>
+      <div class="fila-print"><span>Régimen</span><span>${f.regimenFiscal}</span></div>
+      <div class="fila-print"><span>Uso CFDI</span><span>${f.usoCFDI}</span></div>
+      <div class="fila-print"><span>Forma de pago</span><span>${f.formaPago}</span></div>
+      <div class="chico">${f.correo}</div>
+      <div class="linea-punteada"></div>
+      <div class="fila-print total-print"><span>TOTAL</span><span>$${(f.total || 0).toFixed(2)}</span></div>
+      <div class="linea-punteada"></div>
+    `;
+    try {
+      await Api.post('/impresion', { tipo: 'ticket', html, estacion: 'admin' });
+      mostrarToast('Datos de factura enviados a la impresora');
+    } catch (err) {
       mostrarToast(err.message, true);
     }
   }

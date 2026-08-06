@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const ColaImpresion = require('../models/ColaImpresion');
-const { verificarToken } = require('../middleware/auth');
+const Configuracion = require('../models/Configuracion');
+const { verificarToken, permitirRoles } = require('../middleware/auth');
 
 // Enviar un trabajo a la cola (desde mesero/cocina/caja)
 router.post('/', verificarToken, async (req, res) => {
@@ -34,13 +35,45 @@ router.get('/pendientes', verificarToken, async (req, res) => {
   res.json(pendientes);
 });
 
+// Estado de la impresión automática (cualquier consola lo puede consultar)
+router.get('/estado', verificarToken, async (req, res) => {
+  try {
+    const config = await Configuracion.obtener();
+    res.json({ impresionPausada: config.impresionPausada });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Pausar/reanudar la impresión automática en TODAS las consolas a la vez (solo admin)
+router.patch('/pausar', verificarToken, permitirRoles('admin'), async (req, res) => {
+  try {
+    const { pausada } = req.body;
+    const config = await Configuracion.obtener();
+    config.impresionPausada = !!pausada;
+    await config.save();
+
+    const io = req.app.get('io');
+    if (io) io.emit('estadoImpresion', { impresionPausada: config.impresionPausada });
+
+    res.json({ impresionPausada: config.impresionPausada });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Tomar (y marcar como impreso) UN solo trabajo pendiente de forma atómica.
 // Esto es lo que usan las consolas (Cocina / Admin / Caja) para imprimir automático:
 // se llama en bucle hasta que regresa null. Al ser un findOneAndUpdate atómico,
 // si Admin y Caja están abiertas al mismo tiempo (ambas escuchan 'admin'),
 // nunca pueden llevarse el mismo trabajo ni imprimirlo dos veces.
+// Si el admin pausó la impresión, regresa null sin tocar nada -- así el trabajo se
+// queda tal cual "pendiente" esperando a que se reanude, en vez de perderse.
 router.get('/consumir', verificarToken, async (req, res) => {
   try {
+    const config = await Configuracion.obtener();
+    if (config.impresionPausada) return res.json(null);
+
     const filtro = { estado: 'pendiente' };
     if (req.query.estacion) filtro.estacion = req.query.estacion;
     const trabajo = await ColaImpresion.findOneAndUpdate(
