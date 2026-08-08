@@ -190,14 +190,27 @@
     }
   }
 
+  // El color de cada categoría se calcula más abajo (colorPorIdCategoria, junto a la
+  // paleta que también usan las tarjetas de producto) para que las pestañas y las
+  // tarjetas usen exactamente los mismos colores por categoría.
   function pintarTabsCategorias() {
     const cont = document.getElementById('categoria-tabs');
     const tabs = [{ _id: 'todas', nombre: 'Todas' }, ...categorias];
-    cont.innerHTML = tabs.map(c => `
-      <button class="categoria-tab ${categoriaActiva === c._id ? 'activa' : ''}" onclick="seleccionarCategoria('${c._id}')">
-        ${c.nombre}
-      </button>
-    `).join('');
+    cont.innerHTML = tabs.map(c => {
+      const activa = categoriaActiva === c._id;
+      if (c._id === 'todas') {
+        return `<button class="categoria-tab ${activa ? 'activa' : ''}" onclick="seleccionarCategoria('${c._id}')">${c.nombre}</button>`;
+      }
+      const color = colorPorIdCategoria(c._id);
+      const estilo = activa
+        ? `background:${color}; border-color:${color}; color:#fff;`
+        : `border-color:${color}; color:${color};`;
+      return `
+        <button class="categoria-tab ${activa ? 'activa' : ''}" style="${estilo}" onclick="seleccionarCategoria('${c._id}')">
+          ${c.nombre}
+        </button>
+      `;
+    }).join('');
   }
 
   function seleccionarCategoria(id) {
@@ -230,12 +243,15 @@
     'hsl(320, 75%, 48%)',  // magenta
     'hsl(345, 80%, 50%)'   // rosa-rojo
   ];
-  function colorDeCategoria(p) {
-    const id = p.categoria && (p.categoria._id || p.categoria);
+  function colorPorIdCategoria(id) {
     if (!id) return '#95a5a6';
     let hash = 0;
     for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
     return PALETA_CATEGORIAS[hash % PALETA_CATEGORIAS.length];
+  }
+  function colorDeCategoria(p) {
+    const id = p.categoria && (p.categoria._id || p.categoria);
+    return colorPorIdCategoria(id);
   }
 
   // Modificadores rápidos para agilizar la toma de pedido (en vez de escribir
