@@ -332,8 +332,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border-color: var(--oceano);
 }
 
-/* Solo en la pantalla del mesero (#categoria-tabs): botones de categoría más grandes
-   y con color propio, para que se distingan rápido y sean fáciles de tocar en tablet. */
+/* Solo en la pantalla del mesero (#categoria-tabs): en 2 filas con wrap en vez de
+   scroll horizontal (con muchas categorías se hacía muy ancho), botones más grandes
+   y con color propio para distinguirlas rápido y tocarlas fácil en tablet. */
+#categoria-tabs {
+  flex-wrap: wrap;
+  overflow-x: visible;
+  max-height: 116px; /* cabe cómodo 2 filas de botones grandes; si sobran categorías, se hace scroll vertical */
+  overflow-y: auto;
+}
 #categoria-tabs .categoria-tab {
   padding: 14px 24px;
   font-size: 1.05rem;
