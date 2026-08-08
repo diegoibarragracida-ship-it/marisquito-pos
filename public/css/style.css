@@ -332,14 +332,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border-color: var(--oceano);
 }
 
-/* Solo en la pantalla del mesero (#categoria-tabs): en 2 filas con wrap en vez de
-   scroll horizontal (con muchas categorías se hacía muy ancho), botones más grandes
-   y con color propio para distinguirlas rápido y tocarlas fácil en tablet. */
+/* Solo en la pantalla del mesero (#categoria-tabs): SIEMPRE 2 filas, ni una más -- con
+   grid en vez de wrap no hay que adivinar alturas. Si sobran categorías para 2 filas,
+   se van agregando columnas hacia la derecha con scroll horizontal. */
 #categoria-tabs {
-  flex-wrap: wrap;
-  overflow-x: visible;
-  max-height: 116px; /* cabe cómodo 2 filas de botones grandes; si sobran categorías, se hace scroll vertical */
-  overflow-y: auto;
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 #categoria-tabs .categoria-tab {
   padding: 14px 24px;

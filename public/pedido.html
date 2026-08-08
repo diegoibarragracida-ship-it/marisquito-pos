@@ -202,9 +202,7 @@
         return `<button class="categoria-tab ${activa ? 'activa' : ''}" onclick="seleccionarCategoria('${c._id}')">${c.nombre}</button>`;
       }
       const color = colorPorIdCategoria(c._id);
-      const estilo = activa
-        ? `background:${color}; border-color:${color}; color:#fff;`
-        : `background:${color}; border-color:${color}; color:#fff; opacity:0.6;`;
+      const estilo = `background:${color}; border-color:${color}; color:#fff;`;
       return `
         <button class="categoria-tab ${activa ? 'activa' : ''}" style="${estilo}" onclick="seleccionarCategoria('${c._id}')">
           ${c.nombre}
