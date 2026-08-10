@@ -106,9 +106,16 @@
       <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Elige el tamaño</label>
       <div id="variantes-opciones" class="variantes-opciones"></div>
     </div>
-    <div id="bloque-peso" style="display:none; margin-bottom:14px; background:#faf6ef; border-radius:10px; padding:12px; text-align:center;">
-      <span style="font-size:0.9rem; font-weight:700; color:var(--oceano);">⚖️ Este producto se pesa y se cobra en Caja</span>
-      <p style="font-size:0.75rem; opacity:0.7; margin-top:4px;">No captures el peso aquí — se manda a cocina para prepararse y Caja lo pesa al momento de cobrar la cuenta.</p>
+    <div id="bloque-peso" style="display:none; margin-bottom:14px; background:#faf6ef; border-radius:10px; padding:12px;">
+      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px; text-align:center;">⚖️ Este producto se vende por peso</label>
+      <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+        <input type="number" id="input-peso-gramos" min="0" step="1" placeholder="gramos" style="width:110px; padding:10px; text-align:center; font-size:1.1rem; border-radius:8px; border:1.5px solid var(--linea);" oninput="actualizarPrecioPorPeso()">
+        <span style="font-size:0.85rem; opacity:0.7;">gramos</span>
+      </div>
+      <p id="precio-calculado-peso" style="text-align:center; font-size:0.95rem; font-weight:700; color:var(--oceano); margin-top:8px;"></p>
+      <p style="font-size:0.72rem; opacity:0.65; margin-top:6px; text-align:center;">
+        Si ya lo pesaste, captúralo aquí. Si prefieres, déjalo <strong>vacío</strong> — se manda igual a cocina y Caja lo pesa al cobrar.
+      </p>
     </div>
     <div id="bloque-estilos" style="display:none; margin-bottom:14px;">
       <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">Elige el estilo/sabor</label>
@@ -403,6 +410,8 @@
     document.getElementById('bloque-cantidad-normal').style.display = esPorPeso ? 'none' : 'flex';
     if (esPorPeso) {
       cantidadModal = 1; // por peso, cada línea es UNA orden -- si quieren otra, la agregan aparte
+      document.getElementById('input-peso-gramos').value = '';
+      document.getElementById('precio-calculado-peso').textContent = '';
     }
 
     const tieneEstilos = !!(variante && variante.estilos && variante.estilos.length > 0);
@@ -417,6 +426,19 @@
       estiloElegido = '';
       contEstilos.innerHTML = '';
     }
+  }
+
+  function actualizarPrecioPorPeso() {
+    const gramos = Number(document.getElementById('input-peso-gramos').value) || 0;
+    const producto = productoModalActual;
+    const variante = producto && producto.variantes ? producto.variantes.find(v => v.nombre === varianteElegida) : null;
+    const texto = document.getElementById('precio-calculado-peso');
+    if (!variante || gramos <= 0) {
+      texto.textContent = '';
+      return;
+    }
+    const precio = (gramos / 100) * variante.precio;
+    texto.textContent = `${gramos}g → $${precio.toFixed(2)}`;
   }
 
   function elegirEstilo(btn, nombre) {
@@ -462,9 +484,17 @@
     const notasExtra = [];
     let gramosParaEnviar = null;
     if (varianteObj && varianteObj.porPeso) {
-      precioUnitario = 0; // pendiente -- Caja lo pesa y calcula el precio real al cobrar
-      if (estiloElegido) notasExtra.push(estiloElegido);
-      notasExtra.push('⚖️ se pesa y cobra en Caja');
+      const gramosCapturados = Number(document.getElementById('input-peso-gramos').value) || 0;
+      if (gramosCapturados > 0) {
+        precioUnitario = (gramosCapturados / 100) * varianteObj.precio;
+        gramosParaEnviar = gramosCapturados;
+        if (estiloElegido) notasExtra.push(estiloElegido);
+        notasExtra.push(`⚖️ ${gramosCapturados}g`);
+      } else {
+        precioUnitario = 0; // pendiente -- Caja lo pesa y calcula el precio real al cobrar
+        if (estiloElegido) notasExtra.push(estiloElegido);
+        notasExtra.push('⚖️ se pesa y cobra en Caja');
+      }
       varianteParaGuardar = varianteObj.nombre;
     } else if (varianteObj) {
       precioUnitario = varianteObj.precio;

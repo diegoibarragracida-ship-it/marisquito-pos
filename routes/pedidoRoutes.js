@@ -163,11 +163,20 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
       precioUnitario = variante.precio;
     }
 
-    // Si es por peso, YA NO se pide aquí -- queda pendiente de pesar/cobrar en Caja
-    // (endpoint /items/:itemId/peso). No se descuenta stock hasta ese momento.
+    // Si el mesero ya pesó el producto (ej. lo pesaron frente al cliente antes de
+    // cocinar), se calcula el precio y se descuenta el stock al instante. Si no lo
+    // pesó, queda en $0 pendiente de que Caja lo pese al cobrar (comportamiento de
+    // siempre) — endpoint /items/:itemId/peso.
     let gramosVenta = null;
     if (variante && variante.porPeso) {
-      precioUnitario = 0;
+      const gramos = Number(pesoGramos) || 0;
+      if (gramos > 0) {
+        precioUnitario = (gramos / 100) * variante.precio;
+        gramosVenta = gramos;
+        await descontarStockPorVenta(productoId, gramos, varianteNombre || '');
+      } else {
+        precioUnitario = 0;
+      }
     } else {
       await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
     }
@@ -227,13 +236,23 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
         precioUnitario = variante.precio;
       }
 
-      // Si es por peso, YA NO se pide el peso aquí -- se manda la comanda a cocina para que
-      // se prepare, pero el precio queda en $0 y SIN descontar stock todavía. Caja captura
-      // el peso real al momento de cobrar (endpoint /items/:itemId/peso más abajo), y ahí
-      // es cuando se calcula el precio de verdad y se descuenta el insumo.
+      // Si el mesero ya pesó el producto (ej. lo pesaron frente al cliente antes de
+      // cocinar), se calcula el precio y se descuenta el stock al instante. Si no lo
+      // pesó, la comanda igual se manda a cocina, pero el precio queda en $0 y SIN
+      // descontar stock — Caja lo pesa al cobrar (endpoint /items/:itemId/peso).
       let gramosVenta = null;
+      let notaPeso = '';
       if (variante && variante.porPeso) {
-        precioUnitario = 0; // pendiente de pesar en Caja
+        const gramos = Number(pesoGramos) || 0;
+        if (gramos > 0) {
+          precioUnitario = (gramos / 100) * variante.precio;
+          gramosVenta = gramos;
+          await descontarStockPorVenta(productoId, gramos, varianteNombre || '');
+          notaPeso = `⚖️ ${gramos}g (pesado por mesero)`;
+        } else {
+          precioUnitario = 0; // pendiente de pesar en Caja
+          notaPeso = '⚖️ SE PESA Y COBRA EN CAJA';
+        }
       } else {
         await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
       }
@@ -248,7 +267,7 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
         estado: 'pendiente'
       });
 
-      const notasComanda = variante && variante.porPeso ? [notas, '⚖️ SE PESA Y COBRA EN CAJA'].filter(Boolean).join(' — ') : notas;
+      const notasComanda = variante && variante.porPeso ? [notas, notaPeso].filter(Boolean).join(' — ') : notas;
       const estacion = producto.estacion || (producto.categoria && producto.categoria.estacion) || 'cocina';
       porEstacion[estacion].push({ nombre: producto.nombre, varianteNombre, cantidad, notas: notasComanda });
     }
