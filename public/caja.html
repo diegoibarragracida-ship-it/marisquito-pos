@@ -100,6 +100,7 @@
 <div class="modal-fondo" id="modal-cobrar">
   <div class="modal-caja ancho">
     <h3 id="cobrar-titulo">Mesa —</h3>
+    <div id="bloque-falta-pesar"></div>
     <div id="cobrar-resumen"></div>
 
     <div class="campo-inline" style="margin-top:10px;">
@@ -200,7 +201,7 @@
       <button class="btn-volver" onclick="cerrarModal('modal-cobrar')">Cancelar</button>
       <button class="btn-volver" onclick="abrirDivision()">Dividir cuenta</button>
       <button class="btn-imprimir" onclick="imprimirTicket()">🖨 Imprimir</button>
-      <button class="btn-principal" onclick="confirmarCobro()">Cobrar</button>
+      <button class="btn-principal" id="btn-confirmar-cobro" onclick="confirmarCobro()">Cobrar</button>
     </div>
   </div>
 </div>
@@ -343,9 +344,9 @@
         return;
       }
       cont.innerHTML = pedidos.map(p => {
-        const total = p.items
-          .filter(i => i.estado !== 'cancelado')
-          .reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
+        const activos = p.items.filter(i => i.estado !== 'cancelado');
+        const total = activos.reduce((acc, i) => acc + (i.producto ? i.precioUnitario * i.cantidad : 0), 0);
+        const faltaPesar = itemsPendientesPeso(activos).length > 0;
         const esLlevar = p.tipo === 'para_llevar';
         const encabezado = esLlevar
           ? `🥡 Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`
@@ -354,6 +355,7 @@
           <div class="cuenta-card ${esLlevar ? 'ocupada' : p.mesa.estado}">
             <div class="mesa-num">${encabezado}</div>
             <div class="mesero-nombre">Atiende: ${p.mesero ? p.mesero.nombre : '—'}</div>
+            ${faltaPesar ? '<div style="font-size:0.72rem; font-weight:700; color:#b8860b;">⚖️ Falta pesar</div>' : ''}
             <div class="total">$${total.toFixed(2)}</div>
             <button onclick='abrirCobro(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Cobrar</button>
           </div>
@@ -445,8 +447,63 @@
       </div>
     `).join('');
 
+    pintarBloqueFaltaPesar(pedido, items);
+
     recalcularCobro();
     document.getElementById('modal-cobrar').classList.add('mostrar');
+  }
+
+  // Productos "por peso" (ej. Mojarra) que llegaron de cocina sin peso todavía --
+  // hay que pesarlos aquí antes de poder cobrar la cuenta.
+  function itemsPendientesPeso(items) {
+    return items.filter(i => {
+      const variante = i.producto && i.producto.variantes ? i.producto.variantes.find(v => v.nombre === i.varianteNombre) : null;
+      return variante && variante.porPeso && i.pesoGramos == null;
+    });
+  }
+
+  function pintarBloqueFaltaPesar(pedido, items) {
+    const cont = document.getElementById('bloque-falta-pesar');
+    const pendientes = itemsPendientesPeso(items);
+    const botonCobrar = document.getElementById('btn-confirmar-cobro');
+
+    if (pendientes.length === 0) {
+      cont.innerHTML = '';
+      if (botonCobrar) { botonCobrar.disabled = false; botonCobrar.style.opacity = '1'; }
+      return;
+    }
+
+    if (botonCobrar) { botonCobrar.disabled = true; botonCobrar.style.opacity = '0.5'; }
+    cont.innerHTML = `
+      <div style="background:#fdf1d6; border:1.5px dashed #b8860b; border-radius:10px; padding:12px; margin-bottom:12px;">
+        <div style="font-weight:700; font-size:0.85rem; color:#8a6d1a; margin-bottom:8px;">⚖️ Falta pesar antes de cobrar</div>
+        ${pendientes.map(i => `
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <span style="flex:1; font-size:0.85rem;">${i.producto.nombre} (${i.varianteNombre})</span>
+            <input type="number" min="0" step="1" placeholder="gramos" id="peso-item-${i._id}" style="width:90px; padding:6px;">
+            <button type="button" class="btn-mini-toggle" style="padding:6px 12px; font-size:0.75rem;" onclick="pesarItemCobro('${i._id}')">Guardar</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  async function pesarItemCobro(itemId) {
+    const input = document.getElementById('peso-item-' + itemId);
+    const gramos = Number(input.value) || 0;
+    if (gramos <= 0) {
+      mostrarToast('Captura un peso mayor a 0', true);
+      return;
+    }
+    try {
+      const pedidoActualizado = await Api.patch(`/pedidos/${pedidoEnCobro._id}/items/${itemId}/peso`, { pesoGramos: gramos });
+      pedidoEnCobro = pedidoActualizado;
+      mostrarToast('Peso guardado');
+      abrirCobro(pedidoEnCobro); // repinta el resumen, el total y el bloque de pendientes con el precio ya calculado
+      cargarCuentas(); // refresca también la tarjeta de la mesa en el salón
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
   }
 
   function propinaSugerida(porcentaje) {
@@ -610,6 +667,11 @@
 
   async function confirmarCobro() {
     if (!pedidoEnCobro) return;
+    const itemsActivos = pedidoEnCobro.items.filter(i => i.estado !== 'cancelado');
+    if (itemsPendientesPeso(itemsActivos).length > 0) {
+      mostrarToast('Falta pesar algún producto antes de cobrar', true);
+      return;
+    }
     if (metodoSeleccionado === 'mixto' && !validarMixto()) {
       mostrarToast('El efectivo + tarjeta debe sumar exactamente el total', true);
       return;

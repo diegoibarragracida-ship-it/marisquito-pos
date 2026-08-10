@@ -6,7 +6,7 @@ const Producto = require('../models/Producto');
 const ColaImpresion = require('../models/ColaImpresion');
 const Usuario = require('../models/Usuario');
 const { descontarStockPorVenta, revertirStockPorCancelacion } = require('../controllers/inventarioController');
-const { verificarToken } = require('../middleware/auth');
+const { verificarToken, permitirRoles } = require('../middleware/auth');
 
 // Crear un nuevo pedido para una mesa (al sentar clientes)
 router.post('/', verificarToken, async (req, res) => {
@@ -53,7 +53,7 @@ router.post('/llevar', verificarToken, async (req, res) => {
 router.get('/', verificarToken, async (req, res) => {
   try {
     const pedidos = await Pedido.find({ estadoCuenta: 'abierta' })
-      .populate('items.producto', 'nombre precio')
+      .populate('items.producto', 'nombre precio variantes')
       .populate('mesero', 'nombre')
       .populate('mesa', 'numero estado')
       .populate('mesasAdicionales', 'numero')
@@ -70,14 +70,14 @@ router.get('/', verificarToken, async (req, res) => {
 router.get('/mesa/:mesaId/actual', verificarToken, async (req, res) => {
   try {
     let pedido = await Pedido.findOne({ mesa: req.params.mesaId, estadoCuenta: 'abierta' })
-      .populate('items.producto', 'nombre precio')
+      .populate('items.producto', 'nombre precio variantes')
       .populate('mesero', 'nombre')
       .populate('mesa', 'numero estado')
       .populate('mesasAdicionales', 'numero');
 
     if (!pedido) {
       pedido = await Pedido.findOne({ mesasAdicionales: req.params.mesaId, estadoCuenta: 'abierta' })
-        .populate('items.producto', 'nombre precio')
+        .populate('items.producto', 'nombre precio variantes')
         .populate('mesero', 'nombre')
         .populate('mesa', 'numero estado')
         .populate('mesasAdicionales', 'numero');
@@ -95,7 +95,7 @@ router.get('/mesa/:mesaId/actual', verificarToken, async (req, res) => {
 router.get('/llevar/activos', verificarToken, async (req, res) => {
   try {
     const pedidos = await Pedido.find({ tipo: 'para_llevar', estadoCuenta: 'abierta' })
-      .populate('items.producto', 'nombre precio')
+      .populate('items.producto', 'nombre precio variantes')
       .populate('mesero', 'nombre')
       .sort('-createdAt');
 
@@ -111,7 +111,7 @@ router.get('/mesero/historial', verificarToken, async (req, res) => {
   try {
     const pedidos = await Pedido.find({ mesero: req.usuario.id })
       .populate('mesa', 'numero')
-      .populate('items.producto', 'nombre precio')
+      .populate('items.producto', 'nombre precio variantes')
       .sort('-createdAt');
 
     res.json(pedidos);
@@ -163,22 +163,14 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
       precioUnitario = variante.precio;
     }
 
-    // Si la variante se vende por peso, el precio SIEMPRE se calcula aquí en el servidor
-    // a partir de los gramos (nunca se usa un precio que venga del navegador) -- así nadie
-    // puede alterar el total editando la petición desde afuera.
+    // Si es por peso, YA NO se pide aquí -- queda pendiente de pesar/cobrar en Caja
+    // (endpoint /items/:itemId/peso). No se descuenta stock hasta ese momento.
     let gramosVenta = null;
     if (variante && variante.porPeso) {
-      gramosVenta = Number(pesoGramos) || 0;
-      if (gramosVenta <= 0) {
-        return res.status(400).json({ error: `Falta el peso de "${producto.nombre}"` });
-      }
-      precioUnitario = (gramosVenta / 100) * variante.precio;
+      precioUnitario = 0;
+    } else {
+      await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
     }
-
-    // Para productos normales se descuenta stock × cantidad de órdenes; para los que
-    // se venden por peso, se descuenta stock × gramos reales vendidos (la receta de esa
-    // variante debe estar configurada como "1 = 1 gramo" del insumo correspondiente).
-    await descontarStockPorVenta(productoId, gramosVenta !== null ? gramosVenta : cantidad, varianteNombre || '');
 
     pedido.items.push({
       producto: productoId,
@@ -235,18 +227,16 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
         precioUnitario = variante.precio;
       }
 
-      // Igual que en /items: si es por peso, el precio se calcula aquí, nunca se confía
-      // en el precioUnitario que pudiera mandar el navegador.
+      // Si es por peso, YA NO se pide el peso aquí -- se manda la comanda a cocina para que
+      // se prepare, pero el precio queda en $0 y SIN descontar stock todavía. Caja captura
+      // el peso real al momento de cobrar (endpoint /items/:itemId/peso más abajo), y ahí
+      // es cuando se calcula el precio de verdad y se descuenta el insumo.
       let gramosVenta = null;
       if (variante && variante.porPeso) {
-        gramosVenta = Number(pesoGramos) || 0;
-        if (gramosVenta <= 0) {
-          return res.status(400).json({ error: `Falta el peso de "${producto.nombre}"` });
-        }
-        precioUnitario = (gramosVenta / 100) * variante.precio;
+        precioUnitario = 0; // pendiente de pesar en Caja
+      } else {
+        await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
       }
-
-      await descontarStockPorVenta(productoId, gramosVenta !== null ? gramosVenta : cantidad, varianteNombre || '');
 
       pedido.items.push({
         producto: productoId,
@@ -258,8 +248,9 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
         estado: 'pendiente'
       });
 
+      const notasComanda = variante && variante.porPeso ? [notas, '⚖️ SE PESA Y COBRA EN CAJA'].filter(Boolean).join(' — ') : notas;
       const estacion = producto.estacion || (producto.categoria && producto.categoria.estacion) || 'cocina';
-      porEstacion[estacion].push({ nombre: producto.nombre, varianteNombre, cantidad, notas });
+      porEstacion[estacion].push({ nombre: producto.nombre, varianteNombre, cantidad, notas: notasComanda });
     }
 
     await pedido.save();
@@ -343,7 +334,8 @@ router.patch('/:pedidoId/cliente-llevar', verificarToken, async (req, res) => {
   }
 });
 
-// Cancelar un item del pedido → repone el stock consumido
+// Cancelar un item del pedido → repone el stock SOLO si de verdad se había descontado
+// (un item normal siempre lo tuvo; uno por peso que todavía no se pesó en Caja, no)
 router.patch('/:pedidoId/items/:itemId/cancelar', verificarToken, async (req, res) => {
   try {
     const pedido = await Pedido.findById(req.params.pedidoId);
@@ -352,8 +344,56 @@ router.patch('/:pedidoId/items/:itemId/cancelar', verificarToken, async (req, re
     const item = pedido.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item no encontrado' });
 
-    await revertirStockPorCancelacion(item.producto, item.pesoGramos != null ? item.pesoGramos : item.cantidad, item.varianteNombre || '');
+    const producto = await Producto.findById(item.producto);
+    const variante = producto && producto.variantes ? producto.variantes.find(v => v.nombre === item.varianteNombre) : null;
+    const esPorPeso = !!(variante && variante.porPeso);
+
+    // Si es por peso y todavía nadie lo pesó (pesoGramos null), nunca se le tocó el stock.
+    if (!esPorPeso || item.pesoGramos != null) {
+      await revertirStockPorCancelacion(item.producto, item.pesoGramos != null ? item.pesoGramos : item.cantidad, item.varianteNombre || '');
+    }
     item.estado = 'cancelado';
+    await pedido.save();
+
+    res.json(pedido);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Caja captura el peso real de un producto "por peso" al momento de cobrar: aquí (y solo
+// aquí) se calcula el precio de verdad y se descuenta el insumo -- nunca antes. Se puede
+// llamar más de una vez para corregir un peso mal capturado (repone el stock viejo antes
+// de descontar el nuevo, para que nunca quede descontado dos veces).
+router.patch('/:pedidoId/items/:itemId/peso', verificarToken, permitirRoles('cajero', 'admin'), async (req, res) => {
+  try {
+    const { pesoGramos } = req.body;
+    const gramos = Number(pesoGramos) || 0;
+    if (gramos <= 0) return res.status(400).json({ error: 'El peso debe ser mayor a 0' });
+
+    const pedido = await Pedido.findById(req.params.pedidoId);
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (pedido.estadoCuenta !== 'abierta') return res.status(400).json({ error: 'Esta cuenta ya está cerrada' });
+
+    const item = pedido.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item no encontrado' });
+
+    const producto = await Producto.findById(item.producto);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
+    const variante = producto.variantes ? producto.variantes.find(v => v.nombre === item.varianteNombre) : null;
+    if (!variante || !variante.porPeso) {
+      return res.status(400).json({ error: 'Este producto no se vende por peso' });
+    }
+
+    // Si ya se había pesado antes (corrección), primero se repone el stock viejo.
+    if (item.pesoGramos != null) {
+      await revertirStockPorCancelacion(item.producto, item.pesoGramos, item.varianteNombre || '');
+    }
+
+    await descontarStockPorVenta(item.producto, gramos, item.varianteNombre || '');
+
+    item.pesoGramos = gramos;
+    item.precioUnitario = (gramos / 100) * variante.precio;
     await pedido.save();
 
     res.json(pedido);

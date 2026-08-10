@@ -86,6 +86,20 @@ router.post('/cobrar/:pedidoId', verificarToken, permitirRoles('cajero', 'admin'
       if (!pedido) throw new Error('Pedido no encontrado');
       if (pedido.estadoCuenta !== 'abierta') throw new Error('Esta cuenta ya fue cerrada');
 
+      // No se puede cerrar la cuenta si algún producto "por peso" (ej. Mojarra) todavía
+      // no se pesó -- si no, se cobraría con precio $0 sin querer.
+      const faltanPesar = pedido.items
+        .filter(i => i.estado !== 'cancelado')
+        .filter(i => {
+          const variante = i.producto && i.producto.variantes
+            ? i.producto.variantes.find(v => v.nombre === i.varianteNombre)
+            : null;
+          return variante && variante.porPeso && i.pesoGramos == null;
+        });
+      if (faltanPesar.length > 0) {
+        throw new Error(`Falta pesar: ${faltanPesar.map(i => `${i.producto.nombre} (${i.varianteNombre})`).join(', ')}`);
+      }
+
       const subtotal = pedido.items
         .filter(i => i.estado !== 'cancelado')
         .reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
