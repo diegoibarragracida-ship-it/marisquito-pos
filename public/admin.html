@@ -683,10 +683,14 @@
       <label>Precio</label>
       <input type="number" id="edit-prod-precio" min="0" step="0.01">
     </div>
+    <label style="display:flex; align-items:center; gap:8px; margin:10px 0; font-size:0.85rem; cursor:pointer;">
+      <input type="checkbox" id="edit-prod-tiene-tamanos" style="width:auto;" onchange="toggleTamanosUIEdit()">
+      Tiene tamaños/variantes (ej. Chico/Mediano/Bola, o Frita/Preparada por peso)
+    </label>
     <div id="edit-bloque-tamanos" style="display:none;">
-      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:6px;">Precios por tamaño</label>
+      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:6px;">Precios por tamaño/variante</label>
       <div id="edit-tamanos-lineas"></div>
-      <button type="button" class="btn-agregar-linea" onclick="agregarLineaTamanoEdit()">+ Agregar tamaño</button>
+      <button type="button" class="btn-agregar-linea" onclick="agregarLineaTamanoEdit()">+ Agregar tamaño/variante</button>
     </div>
     <div class="campo-inline">
       <label>Se imprime en</label>
@@ -1698,18 +1702,27 @@
     document.getElementById('edit-prod-estacion').value = p.estacion || '';
 
     const tieneVariantes = p.variantes && p.variantes.length > 0;
+    document.getElementById('edit-prod-tiene-tamanos').checked = tieneVariantes;
     document.getElementById('edit-campo-precio-simple').style.display = tieneVariantes ? 'none' : 'block';
     document.getElementById('edit-bloque-tamanos').style.display = tieneVariantes ? 'block' : 'none';
 
+    document.getElementById('edit-tamanos-lineas').innerHTML = '';
     if (tieneVariantes) {
-      const cont = document.getElementById('edit-tamanos-lineas');
-      cont.innerHTML = '';
       p.variantes.forEach(v => agregarLineaTamanoEdit(v.nombre, v.precio, v.porPeso, v.estilos));
     } else {
       document.getElementById('edit-prod-precio').value = p.precio || 0;
     }
 
     document.getElementById('modal-editar-producto').classList.add('mostrar');
+  }
+
+  function toggleTamanosUIEdit() {
+    const activo = document.getElementById('edit-prod-tiene-tamanos').checked;
+    document.getElementById('edit-bloque-tamanos').style.display = activo ? 'block' : 'none';
+    document.getElementById('edit-campo-precio-simple').style.display = activo ? 'none' : 'block';
+    if (activo && document.getElementById('edit-tamanos-lineas').children.length === 0) {
+      agregarLineaTamanoEdit();
+    }
   }
 
   function cerrarEditarProducto() {
@@ -1738,7 +1751,7 @@
 
   async function guardarEdicionProducto() {
     const id = document.getElementById('edit-prod-id').value;
-    const tieneVariantes = document.getElementById('edit-bloque-tamanos').style.display !== 'none';
+    const tieneVariantes = document.getElementById('edit-prod-tiene-tamanos').checked;
 
     const body = {
       nombre: document.getElementById('edit-prod-nombre').value.trim(),
