@@ -1468,14 +1468,22 @@
 
   function agregarLineaTamano(nombreSugerido) {
     const cont = document.getElementById('tamanos-lineas');
-    const linea = document.createElement('div');
-    linea.className = 'receta-linea';
-    linea.innerHTML = `
-      <input type="text" placeholder="Nombre (ej. Chico)" class="tamano-nombre" value="${nombreSugerido || ''}">
-      <input type="number" placeholder="Precio" class="tamano-precio" min="0" step="0.01">
-      <button type="button" onclick="this.parentElement.remove()">✕</button>
+    const caja = document.createElement('div');
+    caja.className = 'caja-variante-peso';
+    caja.style.cssText = 'border:1px solid var(--linea); border-radius:10px; padding:8px; margin-bottom:8px;';
+    caja.innerHTML = `
+      <div class="receta-linea" style="margin-bottom:0;">
+        <input type="text" placeholder="Nombre (ej. Chico)" class="tamano-nombre" value="${nombreSugerido || ''}">
+        <input type="number" placeholder="Precio" class="tamano-precio" min="0" step="0.01">
+        <button type="button" onclick="this.closest('.caja-variante-peso').remove()">✕</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:6px; font-size:0.75rem; margin-top:6px; cursor:pointer;">
+        <input type="checkbox" class="tamano-por-peso" style="width:auto;" onchange="this.closest('.caja-variante-peso').querySelector('.tamano-estilos').style.display = this.checked ? 'block' : 'none'">
+        Se vende por peso (el precio de arriba es <strong>por cada 100 gramos</strong>, no un precio fijo)
+      </label>
+      <input type="text" class="tamano-estilos" placeholder="Sabores/estilos opcionales, mismo precio (ej. Al diablo, Al mojo de ajo, Enchipotlada)" style="display:none; margin-top:6px; width:100%; box-sizing:border-box;">
     `;
-    cont.appendChild(linea);
+    cont.appendChild(caja);
   }
 
   function cerrarModal(id) {
@@ -1696,7 +1704,7 @@
     if (tieneVariantes) {
       const cont = document.getElementById('edit-tamanos-lineas');
       cont.innerHTML = '';
-      p.variantes.forEach(v => agregarLineaTamanoEdit(v.nombre, v.precio));
+      p.variantes.forEach(v => agregarLineaTamanoEdit(v.nombre, v.precio, v.porPeso, v.estilos));
     } else {
       document.getElementById('edit-prod-precio').value = p.precio || 0;
     }
@@ -1708,16 +1716,24 @@
     document.getElementById('modal-editar-producto').classList.remove('mostrar');
   }
 
-  function agregarLineaTamanoEdit(nombreSugerido, precioSugerido) {
+  function agregarLineaTamanoEdit(nombreSugerido, precioSugerido, porPesoSugerido, estilosSugeridos) {
     const cont = document.getElementById('edit-tamanos-lineas');
-    const linea = document.createElement('div');
-    linea.className = 'receta-linea';
-    linea.innerHTML = `
-      <input type="text" placeholder="Nombre (ej. Chico)" class="edit-tamano-nombre" value="${nombreSugerido || ''}">
-      <input type="number" placeholder="Precio" class="edit-tamano-precio" min="0" step="0.01" value="${precioSugerido != null ? precioSugerido : ''}">
-      <button type="button" onclick="this.parentElement.remove()">✕</button>
+    const caja = document.createElement('div');
+    caja.className = 'caja-variante-peso';
+    caja.style.cssText = 'border:1px solid var(--linea); border-radius:10px; padding:8px; margin-bottom:8px;';
+    caja.innerHTML = `
+      <div class="receta-linea" style="margin-bottom:0;">
+        <input type="text" placeholder="Nombre (ej. Chico)" class="edit-tamano-nombre" value="${nombreSugerido || ''}">
+        <input type="number" placeholder="Precio" class="edit-tamano-precio" min="0" step="0.01" value="${precioSugerido != null ? precioSugerido : ''}">
+        <button type="button" onclick="this.closest('.caja-variante-peso').remove()">✕</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:6px; font-size:0.75rem; margin-top:6px; cursor:pointer;">
+        <input type="checkbox" class="edit-tamano-por-peso" style="width:auto;" ${porPesoSugerido ? 'checked' : ''} onchange="this.closest('.caja-variante-peso').querySelector('.edit-tamano-estilos').style.display = this.checked ? 'block' : 'none'">
+        Se vende por peso (el precio de arriba es <strong>por cada 100 gramos</strong>, no un precio fijo)
+      </label>
+      <input type="text" class="edit-tamano-estilos" placeholder="Sabores/estilos opcionales, mismo precio (ej. Al diablo, Al mojo de ajo, Enchipotlada)" style="${porPesoSugerido ? '' : 'display:none;'} margin-top:6px; width:100%; box-sizing:border-box;" value="${(estilosSugeridos || []).join(', ')}">
     `;
-    cont.appendChild(linea);
+    cont.appendChild(caja);
   }
 
   async function guardarEdicionProducto() {
@@ -1733,9 +1749,11 @@
     };
 
     if (tieneVariantes) {
-      body.variantes = Array.from(document.querySelectorAll('#edit-tamanos-lineas .receta-linea')).map(linea => ({
-        nombre: linea.querySelector('.edit-tamano-nombre').value.trim(),
-        precio: Number(linea.querySelector('.edit-tamano-precio').value) || 0,
+      body.variantes = Array.from(document.querySelectorAll('#edit-tamanos-lineas .caja-variante-peso')).map(caja => ({
+        nombre: caja.querySelector('.edit-tamano-nombre').value.trim(),
+        precio: Number(caja.querySelector('.edit-tamano-precio').value) || 0,
+        porPeso: caja.querySelector('.edit-tamano-por-peso').checked,
+        estilos: caja.querySelector('.edit-tamano-estilos').value.split(',').map(s => s.trim()).filter(Boolean),
         receta: []
       })).filter(v => v.nombre);
     } else {
@@ -1806,9 +1824,11 @@
     e.preventDefault();
     const tieneTamanos = document.getElementById('prod-tiene-tamanos').checked;
     const variantes = tieneTamanos
-      ? Array.from(document.querySelectorAll('#tamanos-lineas .receta-linea')).map(linea => ({
-          nombre: linea.querySelector('.tamano-nombre').value.trim(),
-          precio: Number(linea.querySelector('.tamano-precio').value) || 0,
+      ? Array.from(document.querySelectorAll('#tamanos-lineas .caja-variante-peso')).map(caja => ({
+          nombre: caja.querySelector('.tamano-nombre').value.trim(),
+          precio: Number(caja.querySelector('.tamano-precio').value) || 0,
+          porPeso: caja.querySelector('.tamano-por-peso').checked,
+          estilos: caja.querySelector('.tamano-estilos').value.split(',').map(s => s.trim()).filter(Boolean),
           receta: []
         })).filter(v => v.nombre)
       : [];

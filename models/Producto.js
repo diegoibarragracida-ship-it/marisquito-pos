@@ -31,7 +31,9 @@ const productoSchema = new mongoose.Schema({
   },
   variantes: [{
     nombre: { type: String, required: true, trim: true }, // ej. "Chico", "Mediano", "Bola"
-    precio: { type: Number, required: true },
+    precio: { type: Number, required: true }, // si porPeso=true, este número es el precio POR CADA 100 GRAMOS, no un precio fijo
+    porPeso: { type: Boolean, default: false }, // true = el mesero captura el peso y el precio se calcula solo
+    estilos: { type: [String], default: [] }, // opcional: ej. ["Al diablo","Al mojo de ajo","Enchipotlada"] -- mismo precio, el mesero solo elige el sabor
     receta: [recetaItemSchema]
   }],
   disponible: {

@@ -14,6 +14,10 @@ const itemPedidoSchema = new mongoose.Schema({
     type: Number, // precio congelado al momento de agregarlo (protege el historial de cambios de precio)
     required: true
   },
+  pesoGramos: {
+    type: Number, // solo si la variante es "por peso": cuántos gramos se vendieron realmente (ej. 450)
+    default: null
+  },
   cantidad: {
     type: Number,
     required: true,

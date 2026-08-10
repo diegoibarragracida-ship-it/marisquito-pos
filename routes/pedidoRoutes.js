@@ -142,7 +142,7 @@ router.get('/:pedidoId', verificarToken, async (req, res) => {
 // desde la pantalla de mesero se usa /items/lote, que manda todo junto y sí imprime).
 router.post('/:pedidoId/items', verificarToken, async (req, res) => {
   try {
-    const { productoId, cantidad, notas, varianteNombre } = req.body;
+    const { productoId, cantidad, notas, varianteNombre, pesoGramos } = req.body;
     const pedido = await Pedido.findById(req.params.pedidoId);
 
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -154,20 +154,37 @@ router.post('/:pedidoId/items', verificarToken, async (req, res) => {
     if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
 
     let precioUnitario = producto.precio;
+    let variante = null;
     if (producto.variantes && producto.variantes.length > 0) {
-      const variante = producto.variantes.find(v => v.nombre === varianteNombre);
+      variante = producto.variantes.find(v => v.nombre === varianteNombre);
       if (!variante) {
         return res.status(400).json({ error: 'Este producto requiere elegir un tamaño (Chico/Mediano/Bola)' });
       }
       precioUnitario = variante.precio;
     }
 
-    await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
+    // Si la variante se vende por peso, el precio SIEMPRE se calcula aquí en el servidor
+    // a partir de los gramos (nunca se usa un precio que venga del navegador) -- así nadie
+    // puede alterar el total editando la petición desde afuera.
+    let gramosVenta = null;
+    if (variante && variante.porPeso) {
+      gramosVenta = Number(pesoGramos) || 0;
+      if (gramosVenta <= 0) {
+        return res.status(400).json({ error: `Falta el peso de "${producto.nombre}"` });
+      }
+      precioUnitario = (gramosVenta / 100) * variante.precio;
+    }
+
+    // Para productos normales se descuenta stock × cantidad de órdenes; para los que
+    // se venden por peso, se descuenta stock × gramos reales vendidos (la receta de esa
+    // variante debe estar configurada como "1 = 1 gramo" del insumo correspondiente).
+    await descontarStockPorVenta(productoId, gramosVenta !== null ? gramosVenta : cantidad, varianteNombre || '');
 
     pedido.items.push({
       producto: productoId,
       varianteNombre: varianteNombre || '',
       precioUnitario,
+      pesoGramos: gramosVenta,
       cantidad,
       notas,
       estado: 'pendiente'
@@ -202,27 +219,40 @@ router.post('/:pedidoId/items/lote', verificarToken, async (req, res) => {
     const porEstacion = { cocina: [], barra: [] };
 
     for (const linea of items) {
-      const { productoId, notas, varianteNombre } = linea;
+      const { productoId, notas, varianteNombre, pesoGramos } = linea;
       const cantidad = Number(linea.cantidad) || 1;
 
       const producto = await Producto.findById(productoId).populate('categoria');
       if (!producto) continue; // producto ya no existe, lo saltamos sin tumbar todo el envío
 
       let precioUnitario = producto.precio;
+      let variante = null;
       if (producto.variantes && producto.variantes.length > 0) {
-        const variante = producto.variantes.find(v => v.nombre === varianteNombre);
+        variante = producto.variantes.find(v => v.nombre === varianteNombre);
         if (!variante) {
           return res.status(400).json({ error: `"${producto.nombre}" requiere elegir un tamaño` });
         }
         precioUnitario = variante.precio;
       }
 
-      await descontarStockPorVenta(productoId, cantidad, varianteNombre || '');
+      // Igual que en /items: si es por peso, el precio se calcula aquí, nunca se confía
+      // en el precioUnitario que pudiera mandar el navegador.
+      let gramosVenta = null;
+      if (variante && variante.porPeso) {
+        gramosVenta = Number(pesoGramos) || 0;
+        if (gramosVenta <= 0) {
+          return res.status(400).json({ error: `Falta el peso de "${producto.nombre}"` });
+        }
+        precioUnitario = (gramosVenta / 100) * variante.precio;
+      }
+
+      await descontarStockPorVenta(productoId, gramosVenta !== null ? gramosVenta : cantidad, varianteNombre || '');
 
       pedido.items.push({
         producto: productoId,
         varianteNombre: varianteNombre || '',
         precioUnitario,
+        pesoGramos: gramosVenta,
         cantidad,
         notas,
         estado: 'pendiente'
@@ -322,7 +352,7 @@ router.patch('/:pedidoId/items/:itemId/cancelar', verificarToken, async (req, re
     const item = pedido.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item no encontrado' });
 
-    await revertirStockPorCancelacion(item.producto, item.cantidad, item.varianteNombre || '');
+    await revertirStockPorCancelacion(item.producto, item.pesoGramos != null ? item.pesoGramos : item.cantidad, item.varianteNombre || '');
     item.estado = 'cancelado';
     await pedido.save();
 
