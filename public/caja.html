@@ -102,6 +102,7 @@
     <h3 id="cobrar-titulo">Mesa —</h3>
     <div id="bloque-falta-pesar"></div>
     <div id="cobrar-resumen"></div>
+    <button type="button" class="btn-volver" style="width:100%; margin:8px 0 4px; font-size:0.85rem;" onclick="abrirAgregarProductoCaja()">+ Agregar producto (pidieron algo más / faltó algo)</button>
 
     <div class="campo-inline" style="margin-top:10px;">
       <label>Promoción (opcional)</label>
@@ -206,6 +207,36 @@
   </div>
 </div>
 
+<!-- Modal: agregar producto desde caja (antes de cobrar) -->
+<div class="modal-fondo" id="modal-agregar-caja">
+  <div class="modal-caja ancho">
+    <h3>+ Agregar producto</h3>
+    <p style="font-size:0.78rem; opacity:0.65; margin-top:-6px; margin-bottom:10px;">Se agrega a la misma cuenta y se manda a imprimir la comanda, igual que si lo pidiera el mesero.</p>
+    <div id="categorias-caja" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
+    <div id="productos-caja" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; max-height:45vh; overflow-y:auto;"></div>
+    <div class="modal-botones">
+      <button class="btn-volver" onclick="cerrarModal('modal-agregar-caja')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: elegir variante/tamaño al agregar desde caja -->
+<div class="modal-fondo" id="modal-variante-caja">
+  <div class="modal-caja">
+    <h3 id="titulo-variante-caja">Elige el tamaño</h3>
+    <div id="opciones-variante-caja" style="display:flex; flex-direction:column; gap:8px; margin:10px 0;"></div>
+    <div id="bloque-peso-caja" style="display:none; margin:10px 0; background:#faf6ef; border-radius:10px; padding:12px; text-align:center;">
+      <label style="display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--oceano); margin-bottom:8px;">⚖️ Se vende por peso</label>
+      <input type="number" id="input-peso-caja" min="0" step="1" placeholder="gramos" style="width:110px; padding:10px; text-align:center; font-size:1.1rem; border-radius:8px; border:1.5px solid var(--linea);">
+      <p style="font-size:0.72rem; opacity:0.65; margin-top:6px;">Puedes dejarlo vacío y pesarlo después, igual que siempre.</p>
+    </div>
+    <div class="modal-botones">
+      <button class="btn-volver" onclick="cerrarModal('modal-variante-caja')">Cancelar</button>
+      <button class="btn-principal" onclick="confirmarAgregarCaja()">Agregar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: dividir cuenta -->
 <div class="modal-fondo" id="modal-dividir">
   <div class="modal-caja">
@@ -258,13 +289,30 @@
   let metodoSeleccionado = 'efectivo';
   let tipoTarjetaSeleccionado = null;
   let promosVigentesCache = [];
+  let categoriasCacheCaja = [];
+  let productosCacheCaja = [];
+  let categoriaActivaCaja = 'todas';
 
   if (usuario) {
     pintarBarraSuperior(usuario);
     revisarTurno();
     cargarCuentas();
+    cargarMenuCaja();
     iniciarImpresionAutomatica(['admin', 'barra'], { requiereToque: true }); // cuentas + comandas de barra,
     // siempre con botón de "toca para imprimir" (ver misma nota en admin.html).
+  }
+
+  async function cargarMenuCaja() {
+    try {
+      const [categorias, productos] = await Promise.all([
+        Api.get('/categorias'),
+        Api.get('/admin/productos')
+      ]);
+      categoriasCacheCaja = categorias;
+      productosCacheCaja = productos.filter(p => p.disponible);
+    } catch (err) {
+      console.warn('No se pudo cargar el menú para agregar productos desde caja:', err.message);
+    }
   }
 
   function revisarTurno() {
@@ -970,6 +1018,129 @@
 
   function cerrarModal(id) {
     document.getElementById(id).classList.remove('mostrar');
+  }
+
+  /* ---------------- Agregar producto desde Caja (antes de cobrar) ---------------- */
+  let productoParaAgregarCaja = null;
+  let varianteParaAgregarCaja = null;
+
+  function abrirAgregarProductoCaja() {
+    if (!pedidoEnCobro) return;
+    categoriaActivaCaja = 'todas';
+    pintarCategoriasCaja();
+    pintarProductosCaja();
+    document.getElementById('modal-agregar-caja').classList.add('mostrar');
+  }
+
+  function pintarCategoriasCaja() {
+    const cont = document.getElementById('categorias-caja');
+    const tabs = [{ _id: 'todas', nombre: 'Todas' }, ...categoriasCacheCaja];
+    cont.innerHTML = tabs.map(c => `
+      <button class="categoria-tab ${categoriaActivaCaja === c._id ? 'activa' : ''}" onclick="seleccionarCategoriaCaja('${c._id}')">${c.nombre}</button>
+    `).join('');
+  }
+
+  function seleccionarCategoriaCaja(id) {
+    categoriaActivaCaja = id;
+    pintarCategoriasCaja();
+    pintarProductosCaja();
+  }
+
+  function pintarProductosCaja() {
+    const cont = document.getElementById('productos-caja');
+    const lista = productosCacheCaja.filter(p => {
+      if (p.esPaquete) return false; // los paquetes complejos mejor los agrega el mesero
+      if (categoriaActivaCaja === 'todas') return true;
+      return p.categoria && p.categoria._id === categoriaActivaCaja;
+    });
+
+    cont.innerHTML = lista.length === 0
+      ? '<div class="ticket-vacio" style="grid-column:1/-1;">No hay productos en esta categoría</div>'
+      : lista.map(p => `
+        <button class="producto-card" style="cursor:pointer; border:1.5px solid var(--linea); text-align:left;" onclick='elegirProductoCaja(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
+          <span class="nombre">${p.nombre}</span>
+          <span class="precio">${p.variantes && p.variantes.length ? 'Desde $' + Math.min(...p.variantes.map(v => v.precio)).toFixed(2) : '$' + p.precio.toFixed(2)}</span>
+        </button>
+      `).join('');
+  }
+
+  function elegirProductoCaja(producto) {
+    productoParaAgregarCaja = producto;
+
+    if (!producto.variantes || producto.variantes.length === 0) {
+      // Producto simple, sin tamaños -- se agrega directo sin pedir nada más
+      varianteParaAgregarCaja = null;
+      confirmarAgregarCaja();
+      return;
+    }
+
+    document.getElementById('titulo-variante-caja').textContent = producto.nombre;
+    const cont = document.getElementById('opciones-variante-caja');
+    cont.innerHTML = producto.variantes.map((v, i) => `
+      <button type="button" class="btn-volver" style="text-align:left; padding:12px;" onclick="elegirVarianteCaja(${i})">
+        ${v.nombre} — ${v.porPeso ? '$' + v.precio.toFixed(2) + ' / 100g' : '$' + v.precio.toFixed(2)}
+      </button>
+    `).join('');
+    document.getElementById('bloque-peso-caja').style.display = 'none';
+    document.getElementById('input-peso-caja').value = '';
+    varianteParaAgregarCaja = null;
+
+    document.getElementById('modal-agregar-caja').classList.remove('mostrar');
+    document.getElementById('modal-variante-caja').classList.add('mostrar');
+  }
+
+  function elegirVarianteCaja(indice) {
+    const variante = productoParaAgregarCaja.variantes[indice];
+    varianteParaAgregarCaja = variante;
+    document.querySelectorAll('#opciones-variante-caja button').forEach((b, i) => {
+      b.classList.toggle('activo', i === indice);
+    });
+    document.getElementById('bloque-peso-caja').style.display = variante.porPeso ? 'block' : 'none';
+
+    if (!variante.porPeso) {
+      confirmarAgregarCaja();
+    }
+  }
+
+  async function confirmarAgregarCaja() {
+    if (!productoParaAgregarCaja || !pedidoEnCobro) return;
+
+    const pesoGramos = varianteParaAgregarCaja && varianteParaAgregarCaja.porPeso
+      ? (Number(document.getElementById('input-peso-caja').value) || null)
+      : null;
+
+    try {
+      await Api.post(`/pedidos/${pedidoEnCobro._id}/items/lote`, {
+        items: [{
+          productoId: productoParaAgregarCaja._id,
+          varianteNombre: varianteParaAgregarCaja ? varianteParaAgregarCaja.nombre : '',
+          cantidad: 1,
+          notas: '',
+          pesoGramos
+        }]
+      });
+
+      mostrarToast(`${productoParaAgregarCaja.nombre} agregado — imprimiendo comanda 🖨`);
+      cerrarModal('modal-variante-caja');
+      cerrarModal('modal-agregar-caja');
+
+      // Refresca el pedido (nuevo total, nueva lista) sin cerrar el modal de cobro
+      const pedidoActualizado = await Api.get(`/pedidos/${pedidoEnCobro._id}`);
+      pedidoEnCobro = pedidoActualizado;
+      const cont = document.getElementById('cobrar-resumen');
+      const items = pedidoActualizado.items.filter(i => i.estado !== 'cancelado');
+      cont.innerHTML = (pedidoActualizado.notaGeneral ? `<div class="nota-general-caja" style="margin-bottom:10px;">📌 ${pedidoActualizado.notaGeneral}</div>` : '') + items.map(i => `
+        <div class="resumen-linea">
+          <span>${i.cantidad}× ${i.producto ? i.producto.nombre : 'Producto'}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}</span>
+          <span>$${(i.producto ? i.precioUnitario * i.cantidad : 0).toFixed(2)}</span>
+        </div>
+      `).join('');
+      pintarBloqueFaltaPesar(pedidoActualizado, items);
+      recalcularCobro();
+      if (window.aprovecharClicParaImprimir) window.aprovecharClicParaImprimir();
+    } catch (err) {
+      mostrarToast(err.message, true);
+    }
   }
 
   setInterval(cargarCuentas, 8000);
