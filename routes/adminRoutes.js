@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const multer = require('multer');
+const sharp = require('sharp');
 const Insumo = require('../models/Insumo');
 const Producto = require('../models/Producto');
 const Usuario = require('../models/Usuario');
@@ -11,20 +12,15 @@ const MovimientoInsumo = require('../models/MovimientoInsumo');
 const { verificarToken, permitirRoles } = require('../middleware/auth');
 const { inicioDiaMexico, claveDiaMexico } = require('../utils/fechasMexico');
 
-// Configuración de subida de fotos (almacenamiento local en /uploads)
-// NOTA: en Render el disco es efímero (se borra en cada deploy). Para producción
-// se recomienda usar un servicio externo como Cloudinary o S3 en vez de disco local.
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
-  filename: (req, file, cb) => {
-    const nombreUnico = `${Date.now()}-${file.originalname}`;
-    cb(null, nombreUnico);
-  }
-});
+// Configuración de subida de fotos: se guardan DENTRO de MongoDB (como Base64), no en
+// disco. En Render el disco es efímero (se borra en cada deploy) — guardarlas en la
+// base de datos evita que se pierdan. Se procesan en memoria (nunca tocan el disco) y
+// se comprimen con sharp antes de guardar, para no gastar de más el espacio de Mongo.
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB máximo
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB máximo de subida (se comprime después)
   fileFilter: (req, file, cb) => {
     const tiposPermitidos = /jpeg|jpg|png|webp/;
     const extValida = tiposPermitidos.test(path.extname(file.originalname).toLowerCase());
@@ -190,7 +186,16 @@ router.post('/productos/:id/foto', verificarToken, permitirRoles('admin'), uploa
     const producto = await Producto.findById(req.params.id);
     if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    producto.foto = `/uploads/${req.file.filename}`;
+    // Achica y comprime la foto (máximo 600px de ancho, calidad 75) para que no
+    // ocupe de más en Mongo, y la convierte a Base64 para guardarla directo en el
+    // documento del producto — así nunca se pierde, sin importar cuántas veces
+    // se redespliegue el servidor.
+    const bufferComprimido = await sharp(req.file.buffer)
+      .resize({ width: 600, withoutEnlargement: true })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+
+    producto.foto = `data:image/jpeg;base64,${bufferComprimido.toString('base64')}`;
     await producto.save();
 
     res.json(producto);
