@@ -286,7 +286,13 @@
   const MODS_POR_PATRON = [
     // "Al gusto" = el cliente elige la preparación
     { patron: /al gusto/i, mods: ['Al mojo de ajo', 'A la diabla', 'Al ajillo', 'Empanizado', 'A la plancha', 'A la veracruzana', 'Para llevar'] },
-    { patron: /coctel|cóctel|vuelve a la vida/i, mods: ['Sin cebolla', 'Sin cilantro', 'Sin limón', 'Extra salsa', 'Extra picante', 'Para llevar'] },
+    // "Vuelve a la Vida" lleva varias proteínas mezcladas: además de los condimentos
+    // normales de cóctel, se puede quitar alguna de las que ya trae o agregar calamar/surimi.
+    // Va ANTES que la regla general de cóctel para que la capture primero.
+    { patron: /vuelve a la vida/i, mods: ['Sin camarón', 'Sin pulpo', 'Sin caracol', 'Sin jaiba', 'Con calamar', 'Con surimi', 'Sin cebolla', 'Sin cilantro', 'Sin limón', 'Sin mayonesa', 'Con cápsula', 'Sin cápsula', 'Con aguacate', 'Con aceite de oliva', 'Con chipotle', 'Con habanero', 'Extra salsa', 'Extra picante', 'Para llevar'] },
+    // Aplica a los cócteles de cualquier tamaño (Chico/Mediano/Bola) — los modificadores
+    // no dependen de la variante elegida, se ven igual sin importar el tamaño.
+    { patron: /coctel|cóctel/i, mods: ['Sin cebolla', 'Sin cilantro', 'Sin limón', 'Sin mayonesa', 'Con cápsula', 'Sin cápsula', 'Con aguacate', 'Con aceite de oliva', 'Con chipotle', 'Con habanero', 'Extra salsa', 'Extra picante', 'Para llevar'] },
     { patron: /guacamole/i, mods: ['Sin cebolla', 'Sin cilantro', 'Sin limón', 'Extra chile', 'Para llevar'] },
     { patron: /tostada/i, mods: ['Sin cebolla', 'Sin lechuga', 'Extra limón', 'Extra picante', 'Para llevar'] },
     { patron: /torta/i, mods: ['Sin mayonesa', 'Sin aguacate', 'Extra queso', 'Para llevar'] },

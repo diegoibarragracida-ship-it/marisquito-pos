@@ -855,7 +855,10 @@
             <div style="border-bottom:1px dashed var(--linea); padding:8px 0;">
               <div class="resumen-linea" style="font-size:0.85rem; font-weight:600;">
                 <span>${new Date(v.hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · ${v.referencia} · ${v.mesero}</span>
-                <span>$${v.total.toFixed(2)}</span>
+                <span style="display:flex; align-items:center; gap:8px;">
+                  $${v.total.toFixed(2)}
+                  <button class="btn-imprimir" style="padding:3px 8px; font-size:0.68rem;" title="Reimprimir esta cuenta" onclick='reimprimirCuenta(${JSON.stringify(v).replace(/'/g, "&apos;")})'>🖨</button>
+                </span>
               </div>
               <div style="font-size:0.78rem; opacity:0.75; margin-top:2px;">
                 ${v.items.map(i => `${i.cantidad}× ${i.nombre}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}${i.notas ? ' — ' + i.notas : ''}`).join('<br>')}
@@ -866,6 +869,37 @@
       `;
     } catch (err) {
       cont.innerHTML = '';
+      mostrarToast(err.message, true);
+    }
+  }
+
+  // Reimprime el ticket de una cuenta que ya salió en el Corte del día (por mesero y hora).
+  // Se arma con los mismos datos que ya trae detalleVentas — no vuelve a consultar el pedido.
+  async function reimprimirCuenta(v) {
+    const fecha = new Date(v.hora).toLocaleString('es-MX');
+    const html = `
+      <div class="centrado chico" style="font-weight:700; letter-spacing:1px;">TICKET (REIMPRESIÓN)</div>
+      <h2>RESTAURANTE EL MARISQUITO</h2>
+      <div class="centrado chico">Poniente 6 #57, Col. Centro</div>
+      <div class="centrado chico">${fecha}</div>
+      <div class="centrado chico">${v.referencia}</div>
+      <div class="centrado chico">Atendió: ${v.mesero}</div>
+      <div class="linea-punteada"></div>
+      ${v.items.map(i => `
+        <div class="fila-print"><span>${i.cantidad}× ${i.nombre}${i.varianteNombre ? ' (' + i.varianteNombre + ')' : ''}</span><span>$${(i.precioUnitario * i.cantidad).toFixed(2)}</span></div>
+      `).join('')}
+      <div class="linea-punteada"></div>
+      <div class="fila-print total-print"><span>TOTAL</span><span>$${v.total.toFixed(2)}</span></div>
+      ${v.notaGeneral ? `<div class="centrado chico">📌 ${v.notaGeneral}</div>` : ''}
+      <div class="linea-punteada"></div>
+      <div class="centrado chico">¡Gracias por su visita!</div>
+      <div class="centrado chico">Para factura, solicítala al 272 143 9786</div>
+    `;
+
+    try {
+      await Api.post('/impresion', { tipo: 'ticket', html, estacion: 'admin' });
+      mostrarToast('Cuenta reenviada a la impresora');
+    } catch (err) {
       mostrarToast(err.message, true);
     }
   }

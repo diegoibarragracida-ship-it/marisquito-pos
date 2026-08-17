@@ -260,17 +260,20 @@ router.get('/corte-dia', verificarToken, permitirRoles('cajero', 'admin'), async
     // Una línea por cada venta cobrada ese día, con hora, quién la levantó, qué se
     // pidió en esa mesa/orden (para "para llevar" sin mesa se marca así) y su nota.
     const detalleVentas = pedidosDia.map(p => ({
+      pedidoId: p._id,
       hora: p.updatedAt,
       mesero: p.mesero ? p.mesero.nombre : 'Sin mesero',
       referencia: p.mesa ? `Mesa ${p.mesa.numero}` : `Para llevar${p.clienteLlevar ? ' — ' + p.clienteLlevar : ''}`,
       metodoPago: p.metodoPago || 'efectivo',
       total: p.total || 0,
       notaGeneral: p.notaGeneral || '',
+      // Se incluye precioUnitario para poder reconstruir el ticket completo (botón "Reimprimir")
       items: p.items.filter(i => i.estado !== 'cancelado').map(i => ({
         nombre: i.producto ? i.producto.nombre : 'Producto',
         cantidad: i.cantidad,
         varianteNombre: i.varianteNombre || '',
-        notas: i.notas || ''
+        notas: i.notas || '',
+        precioUnitario: i.precioUnitario || 0
       }))
     }));
 
